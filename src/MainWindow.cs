@@ -46,13 +46,14 @@ class MainWindow : Window {
       <StackPanel Margin='20,0,20,20'>
         <TextBlock Text='WHAT TO RECORD' Style='{StaticResource Caption}'/>
         <Border Background='{StaticResource Card}' CornerRadius='12' Padding='4' Margin='0,8,0,0'>
-          <UniformGrid Columns='3'>
+          <UniformGrid Columns='4'>
             <RadioButton x:Name='ModeScreen' GroupName='mode' Style='{StaticResource Segment}' Tag='&#xE7F4;' Content='Screen'/>
             <RadioButton x:Name='ModeWindow' GroupName='mode' Style='{StaticResource Segment}' Tag='&#xE7C4;' Content='Window'/>
+            <RadioButton x:Name='ModeArea' GroupName='mode' Style='{StaticResource Segment}' Tag='&#xE7A8;' Content='Area'/>
             <RadioButton x:Name='ModeTab' GroupName='mode' Style='{StaticResource Segment}' Tag='&#xE774;' Content='Browser tab'/>
           </UniformGrid>
         </Border>
-        <Grid Margin='0,10,0,0'>
+        <Grid x:Name='SourceRow' Margin='0,10,0,0'>
           <Grid.ColumnDefinitions>
             <ColumnDefinition/>
             <ColumnDefinition Width='Auto'/>
@@ -73,6 +74,17 @@ class MainWindow : Window {
           </ComboBox>
           <Button x:Name='BtnRefresh' Grid.Column='1' Style='{StaticResource IconButton}' Content='&#xE72C;' Width='40' Height='40' Margin='8,0,0,0' ToolTip='Refresh list' AutomationProperties.Name='Refresh list'/>
         </Grid>
+        <Border x:Name='AreaRow' Background='{StaticResource Card2}' BorderBrush='{StaticResource Line}' BorderThickness='1' CornerRadius='10'
+                Height='40' Margin='0,10,0,0' Visibility='Collapsed'>
+          <Grid>
+            <StackPanel Orientation='Horizontal' VerticalAlignment='Center' Margin='13,0,0,0'>
+              <TextBlock Style='{StaticResource Icon}' Text='&#xE7A8;' FontSize='14' Foreground='{StaticResource Muted}' Margin='0,0,10,0'/>
+              <TextBlock x:Name='AreaText' FontSize='13' VerticalAlignment='Center'/>
+            </StackPanel>
+            <Button x:Name='BtnPickArea' Style='{StaticResource LinkButton}' HorizontalAlignment='Right' VerticalAlignment='Center' Margin='0,0,6,0'
+                    Content='Select area' AutomationProperties.Name='Select area'/>
+          </Grid>
+        </Border>
         <TextBlock x:Name='SourceHint' Style='{StaticResource Hint}' Margin='2,8,0,0'/>
 
         <TextBlock Text='AUDIO' Style='{StaticResource Caption}' Margin='0,22,0,0'/>
@@ -212,10 +224,11 @@ class MainWindow : Window {
         F<Button>("BtnSettings").Click += delegate { var p = F<Popup>("SettingsPopup"); p.IsOpen = !p.IsOpen; };
 
         // Source
-        F<RadioButton>(settings.Mode == "window" ? "ModeWindow" : settings.Mode == "tab" ? "ModeTab" : "ModeScreen").IsChecked = true;
-        foreach (var n in new[] { "ModeScreen", "ModeWindow", "ModeTab" })
+        F<RadioButton>(settings.Mode == "window" ? "ModeWindow" : settings.Mode == "tab" ? "ModeTab" : settings.Mode == "area" ? "ModeArea" : "ModeScreen").IsChecked = true;
+        foreach (var n in new[] { "ModeScreen", "ModeWindow", "ModeArea", "ModeTab" })
             F<RadioButton>(n).Checked += delegate { settings.Mode = Mode(); RefreshSources(); };
         F<Button>("BtnRefresh").Click += delegate { RefreshSources(); };
+        F<Button>("BtnPickArea").Click += async delegate { await PickArea(); };
         F<ComboBox>("CbSource").DropDownOpened += delegate { if (Mode() == "window") RefreshSources(); };
 
         // Audio
@@ -257,6 +270,7 @@ class MainWindow : Window {
     string Mode() {
         if (F<RadioButton>("ModeWindow").IsChecked == true) return "window";
         if (F<RadioButton>("ModeTab").IsChecked == true) return "tab";
+        if (F<RadioButton>("ModeArea").IsChecked == true) return "area";
         return "screen";
     }
 
@@ -285,7 +299,7 @@ class MainWindow : Window {
         var src = F<ComboBox>("CbSource");
         bool busy = job != null;
         var btn = F<Button>("BtnRecord");
-        btn.IsEnabled = !starting && session == null && !busy && src.SelectedItem is SrcItem;
+        btn.IsEnabled = !starting && session == null && !busy && (Mode() == "area" || src.SelectedItem is SrcItem);
         F<TextBlock>("RecordText").Text = busy ? "Please wait - " + job.Verb.ToLowerInvariant() + "..." : "Start recording";
         var cbMic = F<ComboBox>("CbMic");
         bool haveMics = cbMic.Tag as string == "ready";
@@ -319,8 +333,22 @@ class MainWindow : Window {
             ? ((SrcItem)cb.SelectedItem).Label : null;
 
         outputs = Native.Outputs();
+        bool area = mode == "area";
+        F<Grid>("SourceRow").Visibility = area ? Visibility.Collapsed : Visibility.Visible;
+        F<Border>("AreaRow").Visibility = area ? Visibility.Visible : Visibility.Collapsed;
         List<SrcItem> items;
-        if (mode == "tab") {
+        if (area) {
+            items = new List<SrcItem>();
+            var a = SavedArea();
+            F<TextBlock>("AreaText").Text = a == null ? "No area selected yet" : a.W + " × " + a.H + " area";
+            F<Button>("BtnPickArea").Content = a == null ? "Select area" : "Change";
+            hint.Text = a == null ? "Drag across the screen to choose the part to record."
+                                  : "Records this part of the screen. Press Start to record it, or Change to pick another.";
+            if (outputs.Count == 0) hint.Text = "Recording part of the screen needs Windows 10 or newer with a working graphics driver.";
+            cb.ItemsSource = items;
+            UpdateUi();
+            return;
+        } else if (mode == "tab") {
             hint.Text = "Looking for browser tabs...";
             cb.IsEnabled = false;
             items = await Task.Run(() => BrowserTabs.List());
@@ -357,6 +385,34 @@ class MainWindow : Window {
         UpdateUi();
     }
 
+    SrcItem SavedArea() {
+        var p = (settings.Area ?? "").Split(',');
+        int x, y, w, h;
+        if (p.Length != 4 || !int.TryParse(p[0], out x) || !int.TryParse(p[1], out y) || !int.TryParse(p[2], out w) || !int.TryParse(p[3], out h)) return null;
+        if (w < 16 || h < 16) return null;
+        return new SrcItem { Kind = "area", X = x, Y = y, W = w, H = h, Label = w + " x " + h + " area" };
+    }
+
+    // Lets the user drag out an area on screen. Returns true if one was chosen.
+    async Task<bool> PickArea() {
+        if (outputs.Count == 0) outputs = Native.Outputs();
+        Hide();
+        await Task.Delay(250);     // let this window disappear before the screen is captured
+        bool ok = false;
+        using (var picker = new AreaPicker(outputs, scale)) {
+            if (picker.ShowDialog() == System.Windows.Forms.DialogResult.OK) {
+                var r = picker.Selected;
+                settings.Area = r.X + "," + r.Y + "," + r.Width + "," + r.Height;
+                settings.Save();
+                ok = true;
+            }
+        }
+        Show();
+        Activate();
+        RefreshSources();
+        return ok;
+    }
+
     // ---- recording -------------------------------------------------------------------------
 
     // Works out which monitor to capture and the area on it. Returns an error message or null.
@@ -374,6 +430,13 @@ class MainWindow : Window {
             return null;
         }
         bool tab = src.Kind == "tab";
+        if (src.Kind == "area") {
+            int[] ab = { src.X, src.Y, src.W, src.H };
+            foreach (var o in outputs)
+                if (src.X >= o.X && src.X < o.X + o.W && src.Y >= o.Y && src.Y < o.Y + o.H) { monitor = o; break; }
+            if (monitor == null) return "The selected area is no longer on screen. Please select it again.";
+            return ClipToMonitor(ab, monitor, out region, out abs);
+        }
         if (!Native.IsWindow(src.Handle)) return tab ? "That browser window has closed." : "That window has closed. Refresh the list and pick it again.";
         int[] b = tab ? BrowserTabs.PageRect(src.Handle) : Native.Bounds(src.Handle);
         if (b == null) return "Could not find that " + (tab ? "tab" : "window") + " on screen.";
@@ -381,18 +444,27 @@ class MainWindow : Window {
         foreach (var o in outputs)
             if (cx >= o.X && cx < o.X + o.W && cy >= o.Y && cy < o.Y + o.H) { monitor = o; break; }
         if (monitor == null) return "That " + (tab ? "tab" : "window") + " is not visible on screen, so it can't be recorded.";
+        string err = ClipToMonitor(b, monitor, out region, out abs);
+        return err == null ? null : "That " + (tab ? "tab" : "window") + " is too small or off screen.";
+    }
+
+    // Clips rectangle b to the monitor; region is relative to the monitor, abs is in screen coordinates.
+    static string ClipToMonitor(int[] b, SrcItem monitor, out int[] region, out int[] abs) {
+        region = null; abs = null;
         int x1 = Math.Max(b[0], monitor.X), y1 = Math.Max(b[1], monitor.Y);
         int x2 = Math.Min(b[0] + b[2], monitor.X + monitor.W), y2 = Math.Min(b[1] + b[3], monitor.Y + monitor.H);
         int w = (x2 - x1) - (x2 - x1) % 2, h = (y2 - y1) - (y2 - y1) % 2;
-        if (w < 16 || h < 16) return "That " + (tab ? "tab" : "window") + " is too small or off screen.";
+        if (w < 16 || h < 16) return "The area is too small or off screen.";
         region = new[] { x1 - monitor.X, y1 - monitor.Y, w, h };
         abs = new[] { x1, y1, w, h };
         return null;
     }
 
     async void StartRecording() {
-        var src = F<ComboBox>("CbSource").SelectedItem as SrcItem;
-        if (src == null || session != null || starting || job != null) return;
+        if (session != null || starting || job != null) return;
+        if (Mode() == "area" && SavedArea() == null && !await PickArea()) return;
+        var src = Mode() == "area" ? SavedArea() : F<ComboBox>("CbSource").SelectedItem as SrcItem;
+        if (src == null) return;
         SaveSettings();
         starting = true;
         UpdateUi();

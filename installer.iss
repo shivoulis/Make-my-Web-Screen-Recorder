@@ -1,7 +1,7 @@
 ﻿; Inno Setup script for Make my Web Screen Recorder. Built by build.ps1.
 
 #define AppName "Make my Web Screen Recorder"
-#define AppVersion "2.0.0"
+#define AppVersion "2.1.0"
 #define AppExe "MakeMyWebScreenRecorder.exe"
 
 [Setup]

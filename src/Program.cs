@@ -23,8 +23,8 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Make my Web Screen Recorder")]
 [assembly: AssemblyProduct("Make my Web Screen Recorder")]
 [assembly: AssemblyDescription("Screen, window and browser-tab recorder")]
-[assembly: AssemblyVersion("2.0.0.0")]
-[assembly: AssemblyFileVersion("2.0.0.0")]
+[assembly: AssemblyVersion("2.1.0.0")]
+[assembly: AssemblyFileVersion("2.1.0.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace MakeMyWebRecorder {
@@ -178,6 +178,7 @@ class Settings {
     public string Mode = "screen";
     public string Fps = "30";
     public string Mic = "";
+    public string Area = "";        // last selected area: x,y,w,h in physical pixels
     public bool MicOn = true, SystemAudio = true, Cursor = true, Clicks = true, Countdown = true, KeepLossless = false;
 
     static string FilePath {
@@ -198,6 +199,7 @@ class Settings {
                     case "Mode": s.Mode = v; break;
                     case "Fps": s.Fps = v; break;
                     case "Mic": s.Mic = v; break;
+                    case "Area": s.Area = v; break;
                     case "MicOn": s.MicOn = b; break;
                     case "SystemAudio": s.SystemAudio = b; break;
                     case "Mouse": case "Cursor": s.Cursor = b; break;
@@ -214,7 +216,7 @@ class Settings {
         try {
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath));
             File.WriteAllLines(FilePath, new[] {
-                "Folder=" + Folder, "Mode=" + Mode, "Fps=" + Fps, "Mic=" + Mic,
+                "Folder=" + Folder, "Mode=" + Mode, "Fps=" + Fps, "Mic=" + Mic, "Area=" + Area,
                 "MicOn=" + B(MicOn), "SystemAudio=" + B(SystemAudio), "Cursor=" + B(Cursor),
                 "Clicks=" + B(Clicks), "Countdown=" + B(Countdown), "KeepLossless=" + B(KeepLossless)
             }, Encoding.UTF8);
@@ -228,7 +230,7 @@ class Settings {
 // Capture sources: monitors, windows and browser tabs
 
 class SrcItem {
-    public string Kind { get; set; }          // "screen", "window", "tab" or "desktop" (GDI fallback)
+    public string Kind { get; set; }          // "screen", "window", "tab", "area" or "desktop" (GDI fallback)
     public IntPtr Handle { get; set; }        // window (or browser window for tabs)
     public int Idx { get; set; }              // ddagrab output index for screens
     public int X { get; set; }

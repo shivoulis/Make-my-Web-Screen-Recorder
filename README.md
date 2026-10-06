@@ -2,7 +2,7 @@
 
 A simple, modern screen recorder for Windows 10/11.
 
-- Record the **entire screen**, a **single window**, or a **browser tab** (Chrome, Edge, Brave — records just the page, without the browser toolbars)
+- Record the **entire screen**, a **single window**, a **selected area** (drag to choose), or a **browser tab** (Chrome, Edge, Brave — records just the page, without the browser toolbars)
 - **Microphone** and **system audio** ("what you hear"), each with an on/off switch
 - Floating **control bar** while recording: timer, pause/resume, mute mic, discard, stop — hidden from the recording itself
 - Red **frame** around the recorded area, optional **3-2-1 countdown**, optional **click highlights**
@@ -38,6 +38,7 @@ The build copies `ffmpeg.exe` and `ffplay.exe` next to the app, so the installer
 | `src/Recorder.cs` | Recording session (FFmpeg `ddagrab` + lossless H.264 RGB) and the compression step (cuts pauses, silences mic mutes, mixes audio) |
 | `src/MainWindow.cs` | Main window (WPF) |
 | `src/Overlays.cs` | Control bar, countdown and recording frame (excluded from capture) |
+| `src/AreaPicker.cs` | Drag-to-select overlay for recording part of the screen |
 | `src/Theme.cs` | Dark theme and control styles |
 | `installer.iss` | Inno Setup installer script |
 
