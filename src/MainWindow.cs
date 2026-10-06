@@ -298,6 +298,7 @@ class MainWindow : Window {
 
         RefreshSources();
         RefreshRecents();
+        Task.Run(() => Updater.CleanUp());
         if (settings.AutoUpdate) CheckForUpdates(true);
     }
 

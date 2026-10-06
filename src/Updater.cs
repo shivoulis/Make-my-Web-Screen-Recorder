@@ -88,6 +88,14 @@ static class Updater {
         return path;
     }
 
+    // Removes installers left in %TEMP% by earlier updates.
+    public static void CleanUp() {
+        try {
+            foreach (var f in Directory.GetFiles(Path.GetTempPath(), "MakeMyWebScreenRecorder-Setup-*.exe"))
+                try { File.Delete(f); } catch { }
+        } catch { }
+    }
+
     // Runs the installer silently; it closes this app if needed and starts the new version when done.
     public static void Install(string installer) {
         Process.Start(new ProcessStartInfo(installer, "/SILENT /SUPPRESSMSGBOXES /NORESTART") { UseShellExecute = true });
