@@ -121,11 +121,24 @@ class MainWindow : Window {
                 </StackPanel>
               </StackPanel>
             </CheckBox>
-            <ComboBox x:Name='CbCam' Height='36' Margin='0,2,0,10' Visibility='Collapsed'>
-              <ComboBox.ItemTemplate>
-                <DataTemplate><TextBlock Text='{Binding}' TextTrimming='CharacterEllipsis' FontSize='12.5'/></DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
+            <Grid x:Name='CamRow' Margin='0,2,0,10' Visibility='Collapsed'>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width='Auto'/>
+              </Grid.ColumnDefinitions>
+              <ComboBox x:Name='CbCam' Height='36'>
+                <ComboBox.ItemTemplate>
+                  <DataTemplate><TextBlock Text='{Binding}' TextTrimming='CharacterEllipsis' FontSize='12.5'/></DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <Button x:Name='BtnEffects' Grid.Column='1' Style='{StaticResource LinkButton}' VerticalAlignment='Center' Margin='6,0,-8,0'
+                      AutomationProperties.Name='Camera effects' ToolTip='Background blur, scenes and filters'>
+                <StackPanel Orientation='Horizontal'>
+                  <TextBlock Text='&#xE790;' FontFamily='{StaticResource Icons}' FontSize='13' VerticalAlignment='Center' Margin='0,0,6,0'/>
+                  <TextBlock x:Name='EffectsText' Text='Effects' VerticalAlignment='Center'/>
+                </StackPanel>
+              </Button>
+            </Grid>
             <Border Height='1' Background='{StaticResource Line}' Margin='-16,0,-16,4'/>
             <CheckBox x:Name='ChkMic' AutomationProperties.Name='Microphone' Style='{StaticResource Switch}'>
               <StackPanel Orientation='Horizontal'>
@@ -268,6 +281,7 @@ class MainWindow : Window {
     Job job;
     UpdateInfo update;
     CameraBubble camera;
+    readonly CameraEffects camFx = new CameraEffects();
     bool downloadingModel;
     bool updating;
 
@@ -326,6 +340,17 @@ class MainWindow : Window {
         F<CheckBox>("ChkMic").Unchecked += delegate { UpdateUi(); };
         F<CheckBox>("ChkSys").IsChecked = settings.SystemAudio;
         F<CheckBox>("ChkCam").IsChecked = settings.Camera;
+        camFx.Background = settings.CamBackground;
+        camFx.Scene = settings.CamScene;
+        camFx.CustomImage = settings.CamImage;
+        camFx.Filter = settings.CamFilter;
+        F<Button>("BtnEffects").Click += delegate {
+            var dev = F<ComboBox>("CbCam").SelectedItem as string;
+            if (dev == null || session != null) return;
+            new EffectsWindow(this, dev, camFx, scale).ShowDialog();
+            SaveSettings();
+            UpdateUi();
+        };
         F<CheckBox>("ChkCam").Checked += delegate { UpdateUi(); };
         F<CheckBox>("ChkCam").Unchecked += delegate { UpdateUi(); };
         F<CheckBox>("ChkSubs").IsChecked = settings.Subtitles;
@@ -368,7 +393,18 @@ class MainWindow : Window {
         RefreshSources();
         RefreshRecents();
         Task.Run(() => Updater.CleanUp());
-        if (settings.AutoUpdate) CheckForUpdates(true);
+        ContentRendered += delegate {
+            if (!settings.UpdateAsked) {
+                // Ask once before contacting the internet (see CODE_SIGNING.md, privacy policy).
+                var r = MessageBox.Show(this, "Check for updates automatically when the app starts?\n\nThe app will ask GitHub whether a newer version is available. No personal data or recordings are sent. You can change this later in Settings.",
+                    Program.AppName, MessageBoxButton.YesNo, MessageBoxImage.Question);
+                settings.AutoUpdate = r == MessageBoxResult.Yes;
+                settings.UpdateAsked = true;
+                F<CheckBox>("ChkUpdates").IsChecked = settings.AutoUpdate;
+                settings.Save();
+            }
+            if (settings.AutoUpdate) CheckForUpdates(true);
+        };
     }
 
     // ---- helpers ---------------------------------------------------------------------------
@@ -407,6 +443,10 @@ class MainWindow : Window {
         if (cam.Tag as string == "ready" && cam.SelectedItem != null) settings.CameraDevice = (string)cam.SelectedItem;
         settings.CameraSize = F<RadioButton>("CamS").IsChecked == true ? "S" : F<RadioButton>("CamL").IsChecked == true ? "L" : "M";
         settings.Subtitles = On("ChkSubs");
+        settings.CamBackground = camFx.Background;
+        settings.CamScene = camFx.Scene;
+        settings.CamImage = camFx.CustomImage;
+        settings.CamFilter = camFx.Filter;
         settings.SubStyle = SubStyle();
         settings.SubModel = SubModel();
         settings.Save();
@@ -426,7 +466,9 @@ class MainWindow : Window {
         var cbCam = F<ComboBox>("CbCam");
         bool haveCams = cbCam.Tag as string == "ready";
         F<CheckBox>("ChkCam").IsEnabled = haveCams;
-        cbCam.Visibility = haveCams && On("ChkCam") ? Visibility.Visible : Visibility.Collapsed;
+        F<Grid>("CamRow").Visibility = haveCams && On("ChkCam") ? Visibility.Visible : Visibility.Collapsed;
+        F<TextBlock>("EffectsText").Text = camFx.Background == "none" && camFx.Filter == "none" ? "Effects"
+            : camFx.Background == "blur" ? "Blur" : camFx.Background == "scene" ? SceneImages.Title(camFx.Scene) : "Filter";
         F<Border>("SubStyleRow").Visibility = On("ChkSubs") ? Visibility.Visible : Visibility.Collapsed;
         F<TextBlock>("SubModelHint").Text = SubModel() == Subtitles.Fast ? "Quicker, less accurate" : "Best for Greek, slower";
         if (downloadingModel) btn.IsEnabled = false;
@@ -665,7 +707,8 @@ class MainWindow : Window {
             string err = Resolve(src, out monitor, out region, out abs);
             if (err == null && On("ChkCam") && F<ComboBox>("CbCam").Tag as string == "ready") {
                 // Start the camera early so it is live by the time recording begins.
-                camera = new CameraBubble((string)F<ComboBox>("CbCam").SelectedItem, settings.CameraSize, scale);
+                if (camFx.NeedsModel && !SegmentationModel.Available) try { await SegmentationModel.Download(); } catch { }
+                camera = new CameraBubble((string)F<ComboBox>("CbCam").SelectedItem, settings.CameraSize, scale, camFx);
                 camera.ShowInCorner(abs, scale);
             }
             if (err == null && On("ChkCountdown")) {

@@ -60,11 +60,14 @@ if (-not (Test-Path $ico)) {
 # --- 2. Compile ---------------------------------------------------------------
 $fw = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
 $csc = Join-Path $fw 'csc.exe'
+$wm = Join-Path $env:WINDIR 'System32\WinMetadata'     # Windows ML (for camera background effects)
 $exe = Join-Path $build 'MakeMyWebScreenRecorder.exe'
 & $csc /nologo /target:winexe /optimize+ /platform:anycpu "/out:$exe" "/win32icon:$ico" "/lib:$fw\WPF" `
     /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Xaml.dll `
     /r:WindowsBase.dll /r:PresentationCore.dll /r:PresentationFramework.dll `
-    /r:UIAutomationClient.dll /r:UIAutomationTypes.dll /r:Microsoft.VisualBasic.dll /r:System.Web.Extensions.dll `
+    /r:UIAutomationClient.dll /r:UIAutomationTypes.dll /r:Microsoft.VisualBasic.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll `
+    "/r:$fw\System.Runtime.WindowsRuntime.dll" "/r:$fw\System.Runtime.dll" "/r:$wm\Windows.AI.winmd" "/r:$wm\Windows.Foundation.winmd" `
+    "/r:$wm\Windows.Media.winmd" "/r:$wm\Windows.Storage.winmd" "/r:$wm\Windows.Graphics.winmd" `
     (Join-Path $root 'src\*.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Compile failed' }
 Write-Host "Compiled $exe"

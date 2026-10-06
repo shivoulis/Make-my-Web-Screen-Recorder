@@ -26,8 +26,8 @@ using System.Windows.Forms;
 [assembly: AssemblyProduct("Make my Web Screen Recorder")]
 [assembly: AssemblyDescription("Screen, window and browser-tab recorder")]
 [assembly: AssemblyCopyright("Copyright (C) 2026 shivoulis. Licensed under the GNU GPL v3 or later.")]
-[assembly: AssemblyVersion("2.3.0.0")]
-[assembly: AssemblyFileVersion("2.3.0.0")]
+[assembly: AssemblyVersion("2.4.0.0")]
+[assembly: AssemblyFileVersion("2.4.0.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace MakeMyWebRecorder {
@@ -200,9 +200,10 @@ class Settings {
     public string Fps = "30";
     public string Mic = "";
     public string Area = "";        // last selected area: x,y,w,h in physical pixels
-    public bool MicOn = true, SystemAudio = true, Cursor = true, Clicks = true, Countdown = true, KeepLossless = false, AutoUpdate = true;
+    public bool MicOn = true, SystemAudio = true, Cursor = true, Clicks = true, Countdown = true, KeepLossless = false, AutoUpdate = false, UpdateAsked = false;
     public bool Camera = false, Subtitles = false;
     public string CameraDevice = "", CameraSize = "M", SubStyle = "track", SubModel = "accurate";
+    public string CamBackground = "none", CamScene = "ocean", CamImage = "", CamFilter = "none";
 
     static string FilePath {
         get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MakeMyWebScreenRecorder", "settings.ini"); }
@@ -230,12 +231,17 @@ class Settings {
                     case "Countdown": s.Countdown = b; break;
                     case "KeepLossless": s.KeepLossless = b; break;
                     case "AutoUpdate": s.AutoUpdate = b; break;
+                    case "UpdateAsked": s.UpdateAsked = b; break;
                     case "Camera": s.Camera = b; break;
                     case "CameraDevice": s.CameraDevice = v; break;
                     case "CameraSize": s.CameraSize = v; break;
                     case "Subtitles": s.Subtitles = b; break;
                     case "SubStyle": s.SubStyle = v; break;
                     case "SubModel": s.SubModel = v; break;
+                    case "CamBackground": s.CamBackground = v; break;
+                    case "CamScene": s.CamScene = v; break;
+                    case "CamImage": s.CamImage = v; break;
+                    case "CamFilter": s.CamFilter = v; break;
                 }
             }
         } catch { }
@@ -248,9 +254,10 @@ class Settings {
             File.WriteAllLines(FilePath, new[] {
                 "Folder=" + Folder, "Mode=" + Mode, "Fps=" + Fps, "Mic=" + Mic, "Area=" + Area,
                 "MicOn=" + B(MicOn), "SystemAudio=" + B(SystemAudio), "Cursor=" + B(Cursor),
-                "Clicks=" + B(Clicks), "Countdown=" + B(Countdown), "KeepLossless=" + B(KeepLossless), "AutoUpdate=" + B(AutoUpdate),
+                "Clicks=" + B(Clicks), "Countdown=" + B(Countdown), "KeepLossless=" + B(KeepLossless), "AutoUpdate=" + B(AutoUpdate), "UpdateAsked=" + B(UpdateAsked),
                 "Camera=" + B(Camera), "CameraDevice=" + CameraDevice, "CameraSize=" + CameraSize,
-                "Subtitles=" + B(Subtitles), "SubStyle=" + SubStyle, "SubModel=" + SubModel
+                "Subtitles=" + B(Subtitles), "SubStyle=" + SubStyle, "SubModel=" + SubModel,
+                "CamBackground=" + CamBackground, "CamScene=" + CamScene, "CamImage=" + CamImage, "CamFilter=" + CamFilter
             }, Encoding.UTF8);
         } catch { }
     }

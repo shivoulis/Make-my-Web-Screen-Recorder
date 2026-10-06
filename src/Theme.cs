@@ -221,6 +221,32 @@ static class Theme {
     </Setter>
   </Style>
 
+  <!-- Scene thumbnail: picture as Background, title as Tag. -->
+  <Style x:Key='Tile' TargetType='RadioButton'>
+    <Setter Property='Cursor' Value='Hand'/>
+    <Setter Property='Focusable' Value='False'/>
+    <Setter Property='Template'>
+      <Setter.Value>
+        <ControlTemplate TargetType='RadioButton'>
+          <StackPanel Width='66' Margin='0,0,8,8'>
+            <Border x:Name='b' Width='62' Height='62' CornerRadius='11' BorderThickness='2' BorderBrush='Transparent' Background='{TemplateBinding Background}'>
+              <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
+            </Border>
+            <TextBlock Text='{TemplateBinding Tag}' FontSize='10.5' Foreground='{StaticResource Muted}' HorizontalAlignment='Center' TextTrimming='CharacterEllipsis' Margin='0,4,0,0'/>
+          </StackPanel>
+          <ControlTemplate.Triggers>
+            <Trigger Property='IsMouseOver' Value='True'>
+              <Setter TargetName='b' Property='BorderBrush' Value='#5A6273'/>
+            </Trigger>
+            <Trigger Property='IsChecked' Value='True'>
+              <Setter TargetName='b' Property='BorderBrush' Value='{StaticResource Accent}'/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType='ScrollBar'>
     <Setter Property='Width' Value='6'/>
     <Setter Property='MinWidth' Value='6'/>
