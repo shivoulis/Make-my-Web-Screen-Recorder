@@ -14,6 +14,15 @@ static class Subtitles {
     public const string Fast = "fast", Accurate = "accurate";
     public const string Track = "track", Burn = "burn";
 
+    // Spoken language choices (Whisper language codes). Picking one avoids per-chunk guessing, which
+    // can switch languages mid-video; words from other languages (e.g. English terms) are still written.
+    public static readonly string[][] Languages = {
+        new[] { "en", "English" }, new[] { "el", "Greek" }, new[] { "auto", "Detect automatically" },
+        new[] { "de", "German" }, new[] { "fr", "French" }, new[] { "es", "Spanish" }, new[] { "it", "Italian" },
+        new[] { "pt", "Portuguese" }, new[] { "nl", "Dutch" }, new[] { "tr", "Turkish" }, new[] { "ru", "Russian" },
+        new[] { "uk", "Ukrainian" }, new[] { "pl", "Polish" }, new[] { "ar", "Arabic" }, new[] { "zh", "Chinese" }, new[] { "ja", "Japanese" },
+    };
+
     const string VadFile = "ggml-silero-v5.1.2.bin";   // voice detection: stops Whisper inventing text in silences
     const string VadUrl = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/" + VadFile;
     const string ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/";
@@ -52,11 +61,11 @@ static class Subtitles {
     static string FilterPath(string path) { return path.Replace('\\', '/').Replace(":", "\\:"); }
 
     // Transcribes the audio of 'video' into 'srtName' (a file name in the video's folder; run with that folder as working directory).
-    public static string TranscribeArgs(string video, string srtName, string quality, string progressFile) {
+    public static string TranscribeArgs(string video, string srtName, string quality, string language, string progressFile) {
         string model = FilterPath(Path.Combine(ModelsDir, ModelFile(quality)));
         string vad = FilterPath(Path.Combine(ModelsDir, VadFile));
         return "-hide_banner -nostats -loglevel error -y -i " + FF.Q(video) + " -vn -af \"aresample=16000,whisper=model='" + model +
-               "':language=auto:queue=20:vad_model='" + vad + "':destination=" + srtName + ":format=srt\" -progress " + FF.Q(progressFile) + " -f null -";
+               "':language=" + language + ":queue=30:vad_model='" + vad + "':destination=" + srtName + ":format=srt\" -progress " + FF.Q(progressFile) + " -f null -";
     }
 
     // Adds the subtitles as a track viewers can switch on/off (no re-encoding). Replaces any existing subtitle track.
@@ -72,6 +81,12 @@ static class Subtitles {
                "'\" -c:v libx264 -preset medium -crf 18 -c:a copy -movflags +faststart -progress " + FF.Q(progressFile) + " " + FF.Q(output);
     }
 
+    static double Seconds(string srtTime) {
+        var m = Regex.Match(srtTime.Trim(), @"(\d+):(\d+):(\d+)[,.](\d+)");
+        if (!m.Success) return 0;
+        return int.Parse(m.Groups[1].Value) * 3600 + int.Parse(m.Groups[2].Value) * 60 + int.Parse(m.Groups[3].Value) + int.Parse(m.Groups[4].Value) / 1000.0;
+    }
+
     // Renumbers cues from 1 (whisper.cpp starts at 0, which some players reject). Returns false if there is no speech.
     public static bool Tidy(string srt) {
         if (!File.Exists(srt)) return false;
@@ -83,6 +98,9 @@ static class Subtitles {
             if (lines.Length < 3 || !lines[1].Contains("-->")) continue;
             string text = string.Join("\r\n", lines, 2, lines.Length - 2).Trim();
             if (text.Length == 0) continue;
+            // Whisper sometimes invents a word or two (e.g. "Thank you.") in a split-second at the end; real speech lasts longer.
+            var times = lines[1].Split(new[] { "-->" }, StringSplitOptions.None);
+            if (times.Length == 2 && Seconds(times[1]) - Seconds(times[0]) < 0.3) continue;
             sb.Append(++n).Append("\r\n").Append(lines[1].Trim()).Append("\r\n").Append(text).Append("\r\n\r\n");
         }
         File.WriteAllText(srt, sb.ToString(), new UTF8Encoding(false));

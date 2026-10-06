@@ -171,12 +171,23 @@ class MainWindow : Window {
                 </StackPanel>
               </StackPanel>
             </CheckBox>
-            <Border x:Name='SubStyleRow' HorizontalAlignment='Left' Background='{StaticResource Card2}' CornerRadius='9' Padding='3' Margin='30,0,0,8' Visibility='Collapsed'>
-              <StackPanel Orientation='Horizontal'>
-                <RadioButton x:Name='SubTrack' GroupName='substyle' Style='{StaticResource Pill}' Content='Subtitle track + .srt' ToolTip='Viewers can switch the subtitles on or off'/>
-                <RadioButton x:Name='SubBurn' GroupName='substyle' Style='{StaticResource Pill}' Content='Burned into video' ToolTip='Always visible, e.g. for social media'/>
-              </StackPanel>
-            </Border>
+            <StackPanel x:Name='SubOptions' Margin='30,0,0,8' Visibility='Collapsed'>
+              <Border HorizontalAlignment='Left' Background='{StaticResource Card2}' CornerRadius='9' Padding='3'>
+                <StackPanel Orientation='Horizontal'>
+                  <RadioButton x:Name='SubTrack' GroupName='substyle' Style='{StaticResource Pill}' Content='Subtitle track + .srt' ToolTip='Viewers can switch the subtitles on or off'/>
+                  <RadioButton x:Name='SubBurn' GroupName='substyle' Style='{StaticResource Pill}' Content='Burned into video' ToolTip='Always visible, e.g. for social media'/>
+                </StackPanel>
+              </Border>
+              <Grid Margin='0,8,0,0'>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width='Auto'/>
+                  <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text='Spoken language' FontSize='12.5' Foreground='{StaticResource Muted}' VerticalAlignment='Center' Margin='2,0,12,0'/>
+                <ComboBox x:Name='CbLang' Grid.Column='1' Height='32' AutomationProperties.Name='Spoken language'
+                          ToolTip='The main language you speak. Words in other languages (e.g. English terms) are still written.'/>
+              </Grid>
+            </StackPanel>
           </StackPanel>
         </Border>
 
@@ -360,6 +371,9 @@ class MainWindow : Window {
         };
         F<CheckBox>("ChkSubs").Unchecked += delegate { UpdateUi(); };
         F<RadioButton>(settings.SubStyle == Subtitles.Burn ? "SubBurn" : "SubTrack").IsChecked = true;
+        var langs = Subtitles.Languages.Select(l => new LangChoice { Code = l[0], Name = l[1] }).ToList();
+        F<ComboBox>("CbLang").ItemsSource = langs;
+        F<ComboBox>("CbLang").SelectedItem = langs.FirstOrDefault(l => l.Code == settings.SubLang) ?? langs[0];
         F<RadioButton>(settings.SubModel == Subtitles.Fast ? "SubFast" : "SubAccurate").IsChecked = true;
         F<RadioButton>(settings.CameraSize == "S" ? "CamS" : settings.CameraSize == "L" ? "CamL" : "CamM").IsChecked = true;
         foreach (var n in new[] { "SubFast", "SubAccurate" }) F<RadioButton>(n).Checked += delegate { UpdateUi(); };
@@ -420,6 +434,12 @@ class MainWindow : Window {
 
     string SubModel() { return F<RadioButton>("SubFast").IsChecked == true ? Subtitles.Fast : Subtitles.Accurate; }
     string SubStyle() { return F<RadioButton>("SubBurn").IsChecked == true ? Subtitles.Burn : Subtitles.Track; }
+    string SubLang() { var l = F<ComboBox>("CbLang").SelectedItem as LangChoice; return l == null ? "en" : l.Code; }
+
+    class LangChoice {
+        public string Code, Name;
+        public override string ToString() { return Name; }
+    }
 
     void Error(string msg) {
         if (IsVisible) MessageBox.Show(this, msg, Program.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -449,6 +469,7 @@ class MainWindow : Window {
         settings.CamFilter = camFx.Filter;
         settings.SubStyle = SubStyle();
         settings.SubModel = SubModel();
+        settings.SubLang = SubLang();
         settings.Save();
     }
 
@@ -469,7 +490,7 @@ class MainWindow : Window {
         F<Grid>("CamRow").Visibility = haveCams && On("ChkCam") ? Visibility.Visible : Visibility.Collapsed;
         F<TextBlock>("EffectsText").Text = camFx.Background == "none" && camFx.Filter == "none" ? "Effects"
             : camFx.Background == "blur" ? "Blur" : camFx.Background == "scene" ? SceneImages.Title(camFx.Scene) : "Filter";
-        F<Border>("SubStyleRow").Visibility = On("ChkSubs") ? Visibility.Visible : Visibility.Collapsed;
+        F<StackPanel>("SubOptions").Visibility = On("ChkSubs") ? Visibility.Visible : Visibility.Collapsed;
         F<TextBlock>("SubModelHint").Text = SubModel() == Subtitles.Fast ? "Quicker, less accurate" : "Best for Greek, slower";
         if (downloadingModel) btn.IsEnabled = false;
     }
@@ -787,8 +808,8 @@ class MainWindow : Window {
         StartEncode(s.RawFile, dst, Encode.Best, tracks, s.HasMic, s.Pauses, s.Mutes, s.Fps,
                     "Compressing recording", On("ChkKeep") ? null : s.RawFile, true);
         if (job != null && tracks > 0 && On("ChkSubs")) {
-            string style = SubStyle(), model = SubModel();
-            job.Then = delegate { MakeSubtitles(dst, style, model); };
+            string style = SubStyle(), model = SubModel(), lang = SubLang();
+            job.Then = delegate { MakeSubtitles(dst, style, model, lang); };
         }
     }
 
@@ -893,7 +914,7 @@ class MainWindow : Window {
     }
 
     // Transcribes a recording, saves a .srt next to it, then embeds or burns in the subtitles.
-    async void MakeSubtitles(string video, string style, string quality) {
+    async void MakeSubtitles(string video, string style, string quality, string language) {
         if (job != null) { Error("Please wait until the current " + job.Verb.ToLowerInvariant() + " finishes."); return; }
         if (!await EnsureModel(quality)) return;
         int audio;
@@ -907,7 +928,7 @@ class MainWindow : Window {
         string tmpVideo = Path.Combine(dir, tag + ".mp4");
         string progress = Path.Combine(Path.GetTempPath(), tag + ".txt");
 
-        RunJob(Subtitles.TranscribeArgs(video, tmpSrtName, quality, progress), dir, tmpSrt, dur, progress, "Creating subtitles", null);
+        RunJob(Subtitles.TranscribeArgs(video, tmpSrtName, quality, language, progress), dir, tmpSrt, dur, progress, "Creating subtitles", null);
         if (job == null) return;
         job.Then = delegate {
             if (!Subtitles.Tidy(tmpSrt)) {
@@ -1028,7 +1049,7 @@ class MainWindow : Window {
             e.Handled = true;     // don't let the click reach the row (which would start playback)
             var menu = new ContextMenu();
             menu.Items.Add(Item("Show in folder", "", delegate { Process.Start("explorer.exe", "/select,\"" + f.FullName + "\""); }));
-            if (!lossless) menu.Items.Add(Item(File.Exists(Path.ChangeExtension(f.FullName, ".srt")) ? "Redo subtitles" : "Create subtitles", "", delegate { MakeSubtitles(f.FullName, SubStyle(), SubModel()); }));
+            if (!lossless) menu.Items.Add(Item(File.Exists(Path.ChangeExtension(f.FullName, ".srt")) ? "Redo subtitles" : "Create subtitles", "", delegate { MakeSubtitles(f.FullName, SubStyle(), SubModel(), SubLang()); }));
             menu.Items.Add(Item("Export as high-quality MP4", "", delegate { Export(f.FullName, Encode.Best); }));
             menu.Items.Add(Item("Export as extra-small MP4", "", delegate { Export(f.FullName, Encode.Small); }));
             if (lossless) menu.Items.Add(Item("Export as lossless MKV", "", delegate { Export(f.FullName, Encode.Lossless); }));

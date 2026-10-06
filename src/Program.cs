@@ -202,7 +202,7 @@ class Settings {
     public string Area = "";        // last selected area: x,y,w,h in physical pixels
     public bool MicOn = true, SystemAudio = true, Cursor = true, Clicks = true, Countdown = true, KeepLossless = false, AutoUpdate = false, UpdateAsked = false;
     public bool Camera = false, Subtitles = false;
-    public string CameraDevice = "", CameraSize = "M", SubStyle = "track", SubModel = "accurate";
+    public string CameraDevice = "", CameraSize = "M", SubStyle = "track", SubModel = "accurate", SubLang = "en";
     public string CamBackground = "none", CamScene = "ocean", CamImage = "", CamFilter = "none";
 
     static string FilePath {
@@ -238,6 +238,7 @@ class Settings {
                     case "Subtitles": s.Subtitles = b; break;
                     case "SubStyle": s.SubStyle = v; break;
                     case "SubModel": s.SubModel = v; break;
+                    case "SubLang": s.SubLang = v; break;
                     case "CamBackground": s.CamBackground = v; break;
                     case "CamScene": s.CamScene = v; break;
                     case "CamImage": s.CamImage = v; break;
@@ -256,7 +257,7 @@ class Settings {
                 "MicOn=" + B(MicOn), "SystemAudio=" + B(SystemAudio), "Cursor=" + B(Cursor),
                 "Clicks=" + B(Clicks), "Countdown=" + B(Countdown), "KeepLossless=" + B(KeepLossless), "AutoUpdate=" + B(AutoUpdate), "UpdateAsked=" + B(UpdateAsked),
                 "Camera=" + B(Camera), "CameraDevice=" + CameraDevice, "CameraSize=" + CameraSize,
-                "Subtitles=" + B(Subtitles), "SubStyle=" + SubStyle, "SubModel=" + SubModel,
+                "Subtitles=" + B(Subtitles), "SubStyle=" + SubStyle, "SubModel=" + SubModel, "SubLang=" + SubLang,
                 "CamBackground=" + CamBackground, "CamScene=" + CamScene, "CamImage=" + CamImage, "CamFilter=" + CamFilter
             }, Encoding.UTF8);
         } catch { }
