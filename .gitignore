@@ -1,0 +1,6 @@
+# Build output (the installer goes to GitHub Releases instead)
+build/
+dist/
+
+# Old PowerShell prototype
+ScreenRecorder.ps1

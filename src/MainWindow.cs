@@ -1,0 +1,727 @@
+// Main window: pick what to record, audio and options, start recording, and browse recent recordings.
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Markup;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+
+namespace MakeMyWebRecorder {
+
+class MainWindow : Window {
+    const string Xaml = @"
+<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
+        xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'
+        Margin='14' Background='{StaticResource Bg}' CornerRadius='16' BorderBrush='{StaticResource Line}' BorderThickness='1'>
+  <Border.Effect><DropShadowEffect BlurRadius='26' ShadowDepth='4' Opacity='0.45'/></Border.Effect>
+  <Grid>
+    <StackPanel>
+      <Grid x:Name='TitleBar' Height='54' Background='Transparent'>
+        <StackPanel Orientation='Horizontal' Margin='20,0,0,0' VerticalAlignment='Center' IsHitTestVisible='False'>
+          <Grid Width='20' Height='20'>
+            <Ellipse Stroke='{StaticResource Text}' StrokeThickness='2'/>
+            <Ellipse Width='9' Height='9' Fill='{StaticResource Accent}'/>
+          </Grid>
+          <TextBlock Text='Make my Web' FontWeight='SemiBold' FontSize='14' Margin='10,0,0,0' VerticalAlignment='Center'/>
+          <TextBlock Text=' Screen Recorder' FontSize='14' Foreground='{StaticResource Muted}' VerticalAlignment='Center'/>
+        </StackPanel>
+        <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' Margin='0,0,10,0'>
+          <Button x:Name='BtnSettings' Style='{StaticResource IconButton}' Content='&#xE713;' ToolTip='Settings' AutomationProperties.Name='Settings'/>
+          <Button x:Name='BtnMin' Style='{StaticResource IconButton}' Content='&#xE921;' FontSize='10' ToolTip='Minimize' AutomationProperties.Name='Minimize'/>
+          <Button x:Name='BtnClose' Style='{StaticResource IconButton}' Content='&#xE8BB;' FontSize='10' ToolTip='Close' AutomationProperties.Name='Close'/>
+        </StackPanel>
+      </Grid>
+
+      <StackPanel Margin='20,0,20,20'>
+        <TextBlock Text='WHAT TO RECORD' Style='{StaticResource Caption}'/>
+        <Border Background='{StaticResource Card}' CornerRadius='12' Padding='4' Margin='0,8,0,0'>
+          <UniformGrid Columns='3'>
+            <RadioButton x:Name='ModeScreen' GroupName='mode' Style='{StaticResource Segment}' Tag='&#xE7F4;' Content='Screen'/>
+            <RadioButton x:Name='ModeWindow' GroupName='mode' Style='{StaticResource Segment}' Tag='&#xE7C4;' Content='Window'/>
+            <RadioButton x:Name='ModeTab' GroupName='mode' Style='{StaticResource Segment}' Tag='&#xE774;' Content='Browser tab'/>
+          </UniformGrid>
+        </Border>
+        <Grid Margin='0,10,0,0'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+            <ColumnDefinition Width='Auto'/>
+          </Grid.ColumnDefinitions>
+          <ComboBox x:Name='CbSource'>
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width='Auto'/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text='{Binding Label}' TextTrimming='CharacterEllipsis' FontSize='13'/>
+                  <TextBlock Grid.Column='1' Text='{Binding Detail}' Foreground='{StaticResource Muted}' FontSize='11.5' Margin='10,0,0,0' VerticalAlignment='Center'/>
+                </Grid>
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <Button x:Name='BtnRefresh' Grid.Column='1' Style='{StaticResource IconButton}' Content='&#xE72C;' Width='40' Height='40' Margin='8,0,0,0' ToolTip='Refresh list' AutomationProperties.Name='Refresh list'/>
+        </Grid>
+        <TextBlock x:Name='SourceHint' Style='{StaticResource Hint}' Margin='2,8,0,0'/>
+
+        <TextBlock Text='AUDIO' Style='{StaticResource Caption}' Margin='0,22,0,0'/>
+        <Border Background='{StaticResource Card}' CornerRadius='12' Padding='16,4,16,6' Margin='0,8,0,0'>
+          <StackPanel>
+            <CheckBox x:Name='ChkMic' Style='{StaticResource Switch}'>
+              <StackPanel Orientation='Horizontal'>
+                <TextBlock Style='{StaticResource Icon}' Text='&#xE720;' Margin='0,0,12,0'/>
+                <TextBlock Text='Microphone' VerticalAlignment='Center'/>
+              </StackPanel>
+            </CheckBox>
+            <ComboBox x:Name='CbMic' Height='36' Margin='0,2,0,10'>
+              <ComboBox.ItemTemplate>
+                <DataTemplate><TextBlock Text='{Binding}' TextTrimming='CharacterEllipsis' FontSize='12.5'/></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Border Height='1' Background='{StaticResource Line}' Margin='-16,0'/>
+            <CheckBox x:Name='ChkSys' Style='{StaticResource Switch}' Margin='0,6,0,0'>
+              <StackPanel Orientation='Horizontal'>
+                <TextBlock Style='{StaticResource Icon}' Text='&#xE767;' Margin='0,0,12,0'/>
+                <StackPanel>
+                  <TextBlock Text='System audio'/>
+                  <TextBlock Text='Sound from apps, videos and calls' FontSize='11.5' Foreground='{StaticResource Muted}'/>
+                </StackPanel>
+              </StackPanel>
+            </CheckBox>
+          </StackPanel>
+        </Border>
+
+        <Button x:Name='BtnRecord' Style='{StaticResource PrimaryButton}' Margin='0,20,0,0' AutomationProperties.Name='Start recording'>
+          <StackPanel Orientation='Horizontal'>
+            <Ellipse Width='12' Height='12' Fill='White' Margin='0,0,10,0' VerticalAlignment='Center'/>
+            <TextBlock x:Name='RecordText' Text='Start recording' VerticalAlignment='Center'/>
+          </StackPanel>
+        </Button>
+
+        <Grid Margin='0,24,0,0'>
+          <TextBlock Text='RECORDINGS' Style='{StaticResource Caption}' VerticalAlignment='Center'/>
+          <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' Margin='0,-6,-8,-6'>
+            <Button x:Name='BtnFolder' Style='{StaticResource LinkButton}' Content='Change folder'/>
+            <Button x:Name='BtnOpenFolder' Style='{StaticResource LinkButton}' Content='Open folder'/>
+          </StackPanel>
+        </Grid>
+        <TextBlock x:Name='FolderPath' Style='{StaticResource Hint}' TextWrapping='NoWrap' TextTrimming='CharacterEllipsis' FontSize='11.5' Margin='2,2,0,0'/>
+        <Border x:Name='BusyCard' Background='{StaticResource Card}' CornerRadius='11' Padding='14,12' Margin='0,10,0,0' Visibility='Collapsed'>
+          <StackPanel>
+            <Grid>
+              <TextBlock x:Name='BusyText' Text='Compressing recording' FontSize='13'/>
+              <TextBlock x:Name='BusyPct' HorizontalAlignment='Right' Foreground='{StaticResource Muted}' FontSize='12'/>
+            </Grid>
+            <ProgressBar x:Name='BusyBar' Margin='0,9,0,0' Maximum='100'/>
+          </StackPanel>
+        </Border>
+        <StackPanel x:Name='RecentList' Margin='0,10,0,0'/>
+        <TextBlock x:Name='EmptyText' Style='{StaticResource Hint}' Text='Your recordings will appear here.' Margin='2,4,0,0'/>
+      </StackPanel>
+    </StackPanel>
+
+    <Popup x:Name='SettingsPopup' PlacementTarget='{Binding ElementName=BtnSettings}' Placement='Bottom' HorizontalOffset='-262'
+           StaysOpen='False' AllowsTransparency='True' PopupAnimation='Fade'>
+      <Border Background='#1F232B' BorderBrush='{StaticResource Line}' BorderThickness='1' CornerRadius='12' Padding='16,8' Width='310' Margin='0,6,10,10'>
+        <Border.Effect><DropShadowEffect BlurRadius='18' ShadowDepth='3' Opacity='0.4'/></Border.Effect>
+        <StackPanel TextElement.Foreground='{StaticResource Text}'>
+          <Grid Height='44'>
+            <TextBlock Text='Frame rate' VerticalAlignment='Center' FontSize='13.5'/>
+            <Border HorizontalAlignment='Right' VerticalAlignment='Center' Background='{StaticResource Card}' CornerRadius='9' Padding='3'>
+              <StackPanel Orientation='Horizontal'>
+                <RadioButton x:Name='Fps30' GroupName='fps' Style='{StaticResource Pill}' Content='30 fps'/>
+                <RadioButton x:Name='Fps60' GroupName='fps' Style='{StaticResource Pill}' Content='60 fps'/>
+              </StackPanel>
+            </Border>
+          </Grid>
+          <CheckBox x:Name='ChkCursor' Style='{StaticResource Switch}' Content='Show mouse cursor'/>
+          <CheckBox x:Name='ChkClicks' Style='{StaticResource Switch}' Content='Highlight mouse clicks'/>
+          <CheckBox x:Name='ChkCountdown' Style='{StaticResource Switch}' Content='3-second countdown'/>
+          <CheckBox x:Name='ChkKeep' Style='{StaticResource Switch}'>
+            <StackPanel Margin='0,4'>
+              <TextBlock Text='Keep uncompressed original'/>
+              <TextBlock Text='Truly lossless, but very large files' FontSize='11.5' Foreground='{StaticResource Muted}'/>
+            </StackPanel>
+          </CheckBox>
+        </StackPanel>
+      </Border>
+    </Popup>
+  </Grid>
+</Border>";
+
+    readonly FrameworkElement root;
+    readonly Settings settings = Settings.Load();
+    readonly double scale;
+    readonly DispatcherTimer timer = new DispatcherTimer();
+    readonly System.Windows.Forms.NotifyIcon tray = new System.Windows.Forms.NotifyIcon();
+
+    List<SrcItem> outputs = new List<SrcItem>();
+    int refreshVersion;
+    bool starting;
+    Session session;
+    ControlBar bar;
+    RegionFrame frame;
+    Job job;
+
+    T F<T>(string name) { return (T)root.FindName(name); }
+
+    public MainWindow() {
+        using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero)) scale = g.DpiX / 96.0;
+        Overlay.Scale = scale;
+
+        Title = Program.AppName;
+        Width = 468;
+        SizeToContent = SizeToContent.Height;
+        WindowStyle = WindowStyle.None;
+        AllowsTransparency = true;
+        Background = Brushes.Transparent;
+        ResizeMode = ResizeMode.CanMinimize;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        FontFamily = (FontFamily)FindResource("UiFont");
+        Foreground = (Brush)FindResource("Text");
+        UseLayoutRounding = true;
+        TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+
+        System.Drawing.Icon appIcon = null;
+        try {
+            appIcon = System.Drawing.Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath);
+            Icon = Imaging.CreateBitmapSourceFromHIcon(appIcon.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+        } catch { }
+        tray.Icon = appIcon ?? System.Drawing.SystemIcons.Application;
+        tray.Text = "Recording - click to stop";
+        tray.MouseClick += delegate { StopRecording(); };
+
+        root = (FrameworkElement)XamlReader.Parse(Xaml);
+        Content = root;
+
+        // Title bar
+        F<Grid>("TitleBar").MouseLeftButtonDown += delegate { try { DragMove(); } catch { } };
+        F<Button>("BtnMin").Click += delegate { WindowState = WindowState.Minimized; };
+        F<Button>("BtnClose").Click += delegate { Close(); };
+        F<Button>("BtnSettings").Click += delegate { var p = F<Popup>("SettingsPopup"); p.IsOpen = !p.IsOpen; };
+
+        // Source
+        F<RadioButton>(settings.Mode == "window" ? "ModeWindow" : settings.Mode == "tab" ? "ModeTab" : "ModeScreen").IsChecked = true;
+        foreach (var n in new[] { "ModeScreen", "ModeWindow", "ModeTab" })
+            F<RadioButton>(n).Checked += delegate { settings.Mode = Mode(); RefreshSources(); };
+        F<Button>("BtnRefresh").Click += delegate { RefreshSources(); };
+        F<ComboBox>("CbSource").DropDownOpened += delegate { if (Mode() == "window") RefreshSources(); };
+
+        // Audio
+        var cbMic = F<ComboBox>("CbMic");
+        cbMic.ItemsSource = new[] { "Looking for microphones..." };
+        cbMic.SelectedIndex = 0;
+        cbMic.IsEnabled = false;
+        F<CheckBox>("ChkMic").IsChecked = settings.MicOn;
+        F<CheckBox>("ChkMic").Click += delegate { UpdateUi(); };
+        F<CheckBox>("ChkSys").IsChecked = settings.SystemAudio;
+        LoadMicrophones();
+
+        // Options
+        F<RadioButton>(settings.Fps == "60" ? "Fps60" : "Fps30").IsChecked = true;
+        F<CheckBox>("ChkCursor").IsChecked = settings.Cursor;
+        F<CheckBox>("ChkClicks").IsChecked = settings.Clicks;
+        F<CheckBox>("ChkCountdown").IsChecked = settings.Countdown;
+        F<CheckBox>("ChkKeep").IsChecked = settings.KeepLossless;
+
+        // Actions
+        F<Button>("BtnRecord").Click += delegate { StartRecording(); };
+        F<Button>("BtnFolder").Click += delegate { ChangeFolder(); };
+        F<Button>("BtnOpenFolder").Click += delegate {
+            try { Directory.CreateDirectory(settings.Folder); Process.Start("explorer.exe", "\"" + settings.Folder + "\""); } catch { }
+        };
+
+        Activated += delegate { if (session == null) RefreshRecents(); };
+        Closing += OnClosing;
+        timer.Interval = TimeSpan.FromMilliseconds(250);
+        timer.Tick += delegate { Tick(); };
+        timer.Start();
+
+        RefreshSources();
+        RefreshRecents();
+    }
+
+    // ---- helpers ---------------------------------------------------------------------------
+
+    string Mode() {
+        if (F<RadioButton>("ModeWindow").IsChecked == true) return "window";
+        if (F<RadioButton>("ModeTab").IsChecked == true) return "tab";
+        return "screen";
+    }
+
+    bool On(string name) { return F<CheckBox>(name).IsChecked == true; }
+
+    void Error(string msg) {
+        if (IsVisible) MessageBox.Show(this, msg, Program.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
+        else MessageBox.Show(msg, Program.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    void SaveSettings() {
+        settings.Mode = Mode();
+        settings.MicOn = On("ChkMic");
+        var mic = F<ComboBox>("CbMic");
+        if (mic.IsEnabled && mic.SelectedItem != null) settings.Mic = (string)mic.SelectedItem;
+        settings.SystemAudio = On("ChkSys");
+        settings.Fps = F<RadioButton>("Fps60").IsChecked == true ? "60" : "30";
+        settings.Cursor = On("ChkCursor");
+        settings.Clicks = On("ChkClicks");
+        settings.Countdown = On("ChkCountdown");
+        settings.KeepLossless = On("ChkKeep");
+        settings.Save();
+    }
+
+    void UpdateUi() {
+        var src = F<ComboBox>("CbSource");
+        bool busy = job != null;
+        var btn = F<Button>("BtnRecord");
+        btn.IsEnabled = !starting && session == null && !busy && src.SelectedItem is SrcItem;
+        F<TextBlock>("RecordText").Text = busy ? "Please wait - " + job.Verb.ToLowerInvariant() + "..." : "Start recording";
+        var cbMic = F<ComboBox>("CbMic");
+        bool haveMics = cbMic.Tag as string == "ready";
+        cbMic.IsEnabled = haveMics && On("ChkMic");
+        F<CheckBox>("ChkMic").IsEnabled = haveMics;
+        F<TextBlock>("FolderPath").Text = settings.Folder;
+    }
+
+    async void LoadMicrophones() {
+        List<string> mics;
+        try { mics = await Task.Run(() => FF.Microphones()); } catch { mics = new List<string>(); }
+        var cb = F<ComboBox>("CbMic");
+        if (mics.Count == 0) {
+            cb.ItemsSource = new[] { "No microphone found" };
+            cb.SelectedIndex = 0;
+            F<CheckBox>("ChkMic").IsChecked = false;
+        } else {
+            cb.ItemsSource = mics;
+            cb.SelectedItem = mics.Contains(settings.Mic) ? settings.Mic : mics[0];
+            cb.Tag = "ready";
+        }
+        UpdateUi();
+    }
+
+    async void RefreshSources() {
+        int version = ++refreshVersion;
+        string mode = Mode();
+        var cb = F<ComboBox>("CbSource");
+        var hint = F<TextBlock>("SourceHint");
+        string prev = cb.SelectedItem is SrcItem && ((SrcItem)cb.SelectedItem).Kind == (mode == "screen" ? "screen" : mode)
+            ? ((SrcItem)cb.SelectedItem).Label : null;
+
+        outputs = Native.Outputs();
+        List<SrcItem> items;
+        if (mode == "tab") {
+            hint.Text = "Looking for browser tabs...";
+            cb.IsEnabled = false;
+            items = await Task.Run(() => BrowserTabs.List());
+            if (version != refreshVersion) return;
+            cb.IsEnabled = true;
+            hint.Text = items.Count == 0
+                ? "No Chrome, Edge or Brave windows are open. Open one, then press refresh."
+                : "Switches to the tab and records only the web page, without the browser's toolbars.";
+        } else if (mode == "window") {
+            items = Native.Windows();
+            hint.Text = items.Count == 0 ? "No windows found." : "Records the window's area. Keep it in place while recording.";
+        } else {
+            items = new List<SrcItem>();
+            if (outputs.Count == 0) {
+                var d = new SrcItem { Kind = "desktop", Label = "Entire screen" };
+                items.Add(d);
+            }
+            int n = 1;
+            foreach (var o in outputs) {
+                o.Label = outputs.Count == 1 ? "Entire screen" : "Screen " + n;
+                o.Detail = o.W + " x " + o.H + (o.X == 0 && o.Y == 0 && outputs.Count > 1 ? " - main" : "");
+                items.Add(o);
+                n++;
+            }
+            hint.Text = "Records everything on " + (outputs.Count > 1 ? "the chosen screen." : "your screen.");
+        }
+        if (mode != "screen" && outputs.Count == 0) {
+            items.Clear();
+            hint.Text = "Recording a single window or tab needs Windows 10 or newer with a working graphics driver.";
+        }
+        cb.ItemsSource = items;
+        var match = items.FirstOrDefault(i => i.Label == prev);
+        cb.SelectedItem = match ?? items.FirstOrDefault();
+        UpdateUi();
+    }
+
+    // ---- recording -------------------------------------------------------------------------
+
+    // Works out which monitor to capture and the area on it. Returns an error message or null.
+    string Resolve(SrcItem src, out SrcItem monitor, out int[] region, out int[] abs) {
+        monitor = null; region = null; abs = null;
+        if (src.Kind == "desktop") {
+            var vs = System.Windows.Forms.SystemInformation.VirtualScreen;
+            monitor = new SrcItem { Kind = "desktop", X = vs.X, Y = vs.Y, W = vs.Width, H = vs.Height };
+            abs = new[] { vs.X, vs.Y, vs.Width, vs.Height };
+            return null;
+        }
+        if (src.Kind == "screen") {
+            monitor = src;
+            abs = new[] { src.X, src.Y, src.W, src.H };
+            return null;
+        }
+        bool tab = src.Kind == "tab";
+        if (!Native.IsWindow(src.Handle)) return tab ? "That browser window has closed." : "That window has closed. Refresh the list and pick it again.";
+        int[] b = tab ? BrowserTabs.PageRect(src.Handle) : Native.Bounds(src.Handle);
+        if (b == null) return "Could not find that " + (tab ? "tab" : "window") + " on screen.";
+        int cx = b[0] + b[2] / 2, cy = b[1] + b[3] / 2;
+        foreach (var o in outputs)
+            if (cx >= o.X && cx < o.X + o.W && cy >= o.Y && cy < o.Y + o.H) { monitor = o; break; }
+        if (monitor == null) return "That " + (tab ? "tab" : "window") + " is not visible on screen, so it can't be recorded.";
+        int x1 = Math.Max(b[0], monitor.X), y1 = Math.Max(b[1], monitor.Y);
+        int x2 = Math.Min(b[0] + b[2], monitor.X + monitor.W), y2 = Math.Min(b[1] + b[3], monitor.Y + monitor.H);
+        int w = (x2 - x1) - (x2 - x1) % 2, h = (y2 - y1) - (y2 - y1) % 2;
+        if (w < 16 || h < 16) return "That " + (tab ? "tab" : "window") + " is too small or off screen.";
+        region = new[] { x1 - monitor.X, y1 - monitor.Y, w, h };
+        abs = new[] { x1, y1, w, h };
+        return null;
+    }
+
+    async void StartRecording() {
+        var src = F<ComboBox>("CbSource").SelectedItem as SrcItem;
+        if (src == null || session != null || starting || job != null) return;
+        SaveSettings();
+        starting = true;
+        UpdateUi();
+        try {
+            if (src.Kind == "tab" && !BrowserTabs.Activate(src)) {
+                Error("That tab is no longer open. Press refresh and pick it again.");
+                return;
+            }
+            if (src.Kind == "window") {
+                if (!Native.IsWindow(src.Handle)) { Error("That window has closed. Refresh the list and pick it again."); return; }
+                Native.BringToFront(src.Handle);
+            }
+            Hide();
+            await Task.Delay(src.Kind == "tab" ? 700 : 350);
+
+            SrcItem monitor; int[] region, abs;
+            string err = Resolve(src, out monitor, out region, out abs);
+            if (err == null && On("ChkCountdown")) {
+                await Overlay.Countdown(monitor);
+                err = Resolve(src, out monitor, out region, out abs);     // the window may have moved
+            }
+            if (err != null) { Show(); Error(err); return; }
+
+            var o = new RecordOptions();
+            o.Screen = monitor;
+            o.Region = region;
+            o.Mic = On("ChkMic") && F<ComboBox>("CbMic").IsEnabled ? (string)F<ComboBox>("CbMic").SelectedItem : null;
+            o.SystemAudio = On("ChkSys");
+            o.Cursor = On("ChkCursor");
+            o.Fps = settings.Fps == "60" ? 60 : 30;
+            o.Folder = settings.Folder;
+            session = Session.Start(o, out err);
+            if (session == null) { Show(); Error(err); return; }
+
+            frame = new RegionFrame(abs, src.Kind == "screen" || src.Kind == "desktop");
+            bar = new ControlBar(session.HasMic);
+            bar.PauseClicked += TogglePause;
+            bar.MicClicked += delegate { if (session != null) { session.SetMicMuted(!session.MicMuted); Tick(); } };
+            bar.StopClicked += StopRecording;
+            bar.DiscardClicked += DiscardRecording;
+            bar.ShowOn(monitor);
+            tray.Visible = true;
+            if (On("ChkClicks")) ClickEffects.Start(scale);
+        } catch (Exception e) {
+            Show();
+            Error("Could not start recording:\n" + e.Message);
+        } finally {
+            starting = false;
+            UpdateUi();
+        }
+    }
+
+    void TogglePause() {
+        if (session == null) return;
+        if (session.Paused) session.Resume(); else session.Pause();
+        if (frame != null) frame.SetPaused(session.Paused);
+        Tick();
+    }
+
+    void CloseOverlays() {
+        ClickEffects.Stop();
+        tray.Visible = false;
+        if (bar != null) { bar.Close(); bar = null; }
+        if (frame != null) { frame.Close(); frame = null; }
+    }
+
+    void BackToMain() {
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+        RefreshRecents();
+        UpdateUi();
+    }
+
+    void StopRecording() {
+        var s = session;
+        if (s == null) return;
+        session = null;
+        CloseOverlays();
+        bool ok = s.Stop();
+        BackToMain();
+        if (!ok) { Error("The recording stopped unexpectedly.\n\n" + s.ErrorTail()); return; }
+        int tracks = (s.HasMic ? 1 : 0) + (s.HasSys ? 1 : 0);
+        string dst = s.RawFile.Replace(" (uncompressed).mkv", ".mp4");
+        StartEncode(s.RawFile, dst, Encode.Best, tracks, s.HasMic, s.Pauses, s.Mutes, s.Fps,
+                    "Compressing recording", On("ChkKeep") ? null : s.RawFile);
+    }
+
+    void DiscardRecording() {
+        if (session == null) return;     // the control bar already asked for a second click to confirm
+        var s = session;
+        session = null;
+        CloseOverlays();
+        s.Discard();
+        BackToMain();
+    }
+
+    // ---- compression / export ------------------------------------------------------------------
+
+    void StartEncode(string src, string dst, string quality, int tracks, bool micFirst,
+                     List<double[]> pauses, List<double[]> mutes, int fps, string verb, string deleteWhenDone) {
+        string progress = Path.Combine(Path.GetTempPath(), "mmwsr-enc-" + Guid.NewGuid() + ".txt");
+        int found;
+        double srcDur = FF.Probe(src, out found);
+        if (tracks < 0) tracks = Math.Min(found, 2);
+        double outDur;
+        string args = Encode.Args(src, dst, quality, tracks, micFirst, pauses, mutes, fps, srcDur, progress, out outDur);
+        try { job = FF.Start(args); }
+        catch (Exception e) { Error("Could not start FFmpeg:\n" + e.Message); return; }
+        job.File = dst;
+        job.Duration = outDur;
+        job.ProgressFile = progress;
+        job.Verb = verb;
+        job.DeleteWhenDone = deleteWhenDone;
+        F<Border>("BusyCard").Visibility = Visibility.Visible;
+        F<TextBlock>("BusyText").Text = verb + "...";
+        F<TextBlock>("BusyPct").Text = "";
+        F<ProgressBar>("BusyBar").Value = 0;
+        RefreshRecents();
+        UpdateUi();
+    }
+
+    void UpdateJob() {
+        var j = job;
+        if (j.Proc.HasExited) {
+            job = null;
+            F<Border>("BusyCard").Visibility = Visibility.Collapsed;
+            try { File.Delete(j.ProgressFile); } catch { }
+            if (j.Proc.ExitCode == 0) {
+                if (j.DeleteWhenDone != null) try { File.Delete(j.DeleteWhenDone); } catch { }
+            } else {
+                try { File.Delete(j.File); } catch { }
+                Error(j.Verb + " failed." + (j.DeleteWhenDone != null ? " The uncompressed recording has been kept." : "") + "\n\n" + j.ErrorTail());
+            }
+            RefreshRecents();
+            UpdateUi();
+            return;
+        }
+        double sec = j.ProgressSeconds();
+        if (sec >= 0 && j.Duration > 0) {
+            int pct = Math.Max(0, Math.Min(100, (int)(sec / j.Duration * 100)));
+            F<ProgressBar>("BusyBar").Value = pct;
+            F<TextBlock>("BusyPct").Text = pct + "%";
+        }
+    }
+
+    void Tick() {
+        if (session != null) {
+            if (session.Exited) {
+                var s = session;
+                session = null;
+                CloseOverlays();
+                s.Stop();
+                BackToMain();
+                Error("The recording stopped unexpectedly.\n\n" + s.ErrorTail());
+                return;
+            }
+            if (bar != null) bar.Update(session.Elapsed, session.Paused, session.MicMuted);
+            var t = session.Elapsed;
+            tray.Text = (session.Paused ? "Paused " : "Recording ") + t.ToString(@"mm\:ss") + " - click to stop";
+        }
+        if (job != null) UpdateJob();
+    }
+
+    // ---- recordings list -----------------------------------------------------------------------
+
+    void RefreshRecents() {
+        var list = F<StackPanel>("RecentList");
+        list.Children.Clear();
+        var skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (job != null) { skip.Add(job.File); if (job.DeleteWhenDone != null) skip.Add(job.DeleteWhenDone); }
+        if (session != null) skip.Add(session.RawFile);
+        List<FileInfo> files = new List<FileInfo>();
+        try {
+            var dir = new DirectoryInfo(settings.Folder);
+            if (dir.Exists)
+                files = dir.GetFiles("*.mp4").Concat(dir.GetFiles("*.mkv"))
+                           .Where(f => !skip.Contains(f.FullName))
+                           .OrderByDescending(f => f.LastWriteTime).Take(4).ToList();
+        } catch { }
+        foreach (var f in files) list.Children.Add(MakeRow(f));
+        F<TextBlock>("EmptyText").Visibility = files.Count == 0 && job == null ? Visibility.Visible : Visibility.Collapsed;
+        UpdateUi();
+    }
+
+    static string Pretty(FileInfo f) {
+        string name = Path.GetFileNameWithoutExtension(f.Name);
+        DateTime d;
+        string stamp = name.Replace("Recording ", "").Replace(" (uncompressed)", "");
+        if (DateTime.TryParseExact(stamp, "yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out d)) {
+            string day = d.Date == DateTime.Today ? "Today" : d.Date == DateTime.Today.AddDays(-1) ? "Yesterday" : d.ToString("d MMM yyyy");
+            return day + ", " + d.ToString("HH:mm");
+        }
+        return name;
+    }
+
+    static string Size(long bytes) {
+        if (bytes >= 1L << 30) return (bytes / (double)(1L << 30)).ToString("0.0") + " GB";
+        if (bytes >= 1L << 20) return (bytes / (double)(1L << 20)).ToString("0.0") + " MB";
+        return Math.Max(1, bytes / 1024) + " KB";
+    }
+
+    UIElement MakeRow(FileInfo f) {
+        bool lossless = f.Extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase);
+        var row = new Button { Style = (Style)FindResource("Row"), Margin = new Thickness(0, 0, 0, 6), ToolTip = f.FullName };
+        var g = new Grid();
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        g.ColumnDefinitions.Add(new ColumnDefinition());
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var icon = new Border {
+            Width = 38, Height = 38, CornerRadius = new CornerRadius(9), Background = (Brush)FindResource("Card2"),
+            Child = new TextBlock {
+                Text = "", FontFamily = (FontFamily)FindResource("Icons"), FontSize = 14,
+                Foreground = (Brush)FindResource("Accent"), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+            }
+        };
+        g.Children.Add(icon);
+
+        var text = new StackPanel { Margin = new Thickness(12, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = Pretty(f), FontSize = 13.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+        text.Children.Add(new TextBlock {
+            Text = Size(f.Length) + "  ·  " + (lossless ? "Uncompressed MKV" : "MP4"),
+            FontSize = 11.5, Foreground = (Brush)FindResource("Muted"), Margin = new Thickness(0, 1, 0, 0)
+        });
+        Grid.SetColumn(text, 1);
+        g.Children.Add(text);
+
+        var more = new Button { Style = (Style)FindResource("IconButton"), Content = "", ToolTip = "More" };
+        System.Windows.Automation.AutomationProperties.SetName(more, "More options");
+        Grid.SetColumn(more, 2);
+        g.Children.Add(more);
+        row.Content = g;
+
+        row.Click += delegate { Play(f.FullName); };
+        more.Click += delegate {
+            var menu = new ContextMenu();
+            menu.Items.Add(Item("Show in folder", "", delegate { Process.Start("explorer.exe", "/select,\"" + f.FullName + "\""); }));
+            menu.Items.Add(Item("Export as high-quality MP4", "", delegate { Export(f.FullName, Encode.Best); }));
+            menu.Items.Add(Item("Export as extra-small MP4", "", delegate { Export(f.FullName, Encode.Small); }));
+            if (lossless) menu.Items.Add(Item("Export as lossless MKV", "", delegate { Export(f.FullName, Encode.Lossless); }));
+            menu.Items.Add(Item("Move to Recycle Bin", "", delegate { Recycle(f.FullName); }));
+            menu.PlacementTarget = more;
+            menu.Placement = PlacementMode.Bottom;
+            menu.IsOpen = true;
+        };
+        return row;
+    }
+
+    static MenuItem Item(string text, string glyph, RoutedEventHandler click) {
+        var m = new MenuItem { Header = text, Tag = glyph };
+        m.Click += click;
+        return m;
+    }
+
+    void Play(string file) {
+        try {
+            // The built-in Windows player can't decode lossless RGB H.264, so use ffplay for those.
+            if (file.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) && FF.FFplay != null) {
+                var psi = new ProcessStartInfo(FF.FFplay, "-hide_banner -autoexit -window_title \"Playback\" " + FF.Q(file));
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                Process.Start(psi);
+            } else {
+                Process.Start(file);
+            }
+        } catch (Exception e) {
+            Error("Could not play the file:\n" + e.Message);
+        }
+    }
+
+    void Export(string src, string quality) {
+        if (job != null) { Error("Please wait until the current " + job.Verb.ToLowerInvariant() + " finishes."); return; }
+        string ext = quality == Encode.Lossless ? "mkv" : "mp4";
+        var dlg = new Microsoft.Win32.SaveFileDialog();
+        dlg.Title = "Export as";
+        dlg.Filter = ext.ToUpperInvariant() + " video (*." + ext + ")|*." + ext;
+        dlg.InitialDirectory = Path.GetDirectoryName(src);
+        dlg.FileName = Path.GetFileNameWithoutExtension(src).Replace(" (uncompressed)", "") +
+                       (quality == Encode.Small ? " (small)" : " (export)") + "." + ext;
+        if (dlg.ShowDialog(this) != true) return;
+        if (string.Equals(Path.GetFullPath(dlg.FileName), Path.GetFullPath(src), StringComparison.OrdinalIgnoreCase)) {
+            Error("Pick a different file name than the original.");
+            return;
+        }
+        StartEncode(src, dlg.FileName, quality, -1, false, null, null, 30, "Exporting", null);
+    }
+
+    void Recycle(string file) {
+        var r = MessageBox.Show(this, "Move \"" + Path.GetFileName(file) + "\" to the Recycle Bin?", Program.AppName, MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (r != MessageBoxResult.Yes) return;
+        try {
+            Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(file, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+        } catch (Exception e) { Error(e.Message); }
+        RefreshRecents();
+    }
+
+    void ChangeFolder() {
+        using (var fb = new System.Windows.Forms.FolderBrowserDialog()) {
+            fb.Description = "Where should recordings be saved?";
+            fb.SelectedPath = settings.Folder;
+            if (fb.ShowDialog() == System.Windows.Forms.DialogResult.OK) {
+                settings.Folder = fb.SelectedPath;
+                SaveSettings();
+                RefreshRecents();
+            }
+        }
+    }
+
+    void OnClosing(object sender, System.ComponentModel.CancelEventArgs e) {
+        if (session != null) {
+            // Keep what was recorded; it stays as an uncompressed file the user can export later.
+            var s = session;
+            session = null;
+            CloseOverlays();
+            s.Stop();
+        }
+        if (job != null && !job.Proc.HasExited) {
+            string what = job.Verb.StartsWith("Compress") ? "The recording is still being compressed" : "An export is still running";
+            var r = MessageBox.Show(this, what + ". Cancel it and quit?\n\nThe original file will be kept.", Program.AppName, MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (r != MessageBoxResult.Yes) { e.Cancel = true; return; }
+            try { job.Proc.Kill(); job.Proc.WaitForExit(3000); File.Delete(job.File); } catch { }
+        }
+        SaveSettings();
+        timer.Stop();
+        tray.Visible = false;
+        tray.Dispose();
+    }
+}
+
+}
