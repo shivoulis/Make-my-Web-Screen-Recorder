@@ -26,8 +26,8 @@ using System.Windows.Forms;
 [assembly: AssemblyProduct("Make my Web Screen Recorder")]
 [assembly: AssemblyDescription("Screen, window and browser-tab recorder")]
 [assembly: AssemblyCopyright("Copyright (C) 2026 shivoulis. Licensed under the GNU GPL v3 or later.")]
-[assembly: AssemblyVersion("2.2.0.0")]
-[assembly: AssemblyFileVersion("2.2.0.0")]
+[assembly: AssemblyVersion("2.3.0.0")]
+[assembly: AssemblyFileVersion("2.3.0.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace MakeMyWebRecorder {
@@ -89,6 +89,7 @@ class Job {
     public string ProgressFile;
     public string Verb = "Exporting";
     public string DeleteWhenDone;    // lossless source to remove after a successful compress
+    public Action Then;              // next step to run after this one succeeds
 
     public string ErrorTail() {
         var lines = new List<string>();
@@ -132,8 +133,12 @@ static class FF {
 
     public static string Num(double v) { return v.ToString("0.###", CultureInfo.InvariantCulture); }
 
-    public static Job Start(string args) {
+    public static Job Start(string args) { return Start(args, null); }
+
+    // workDir lets filters refer to files by plain name, avoiding FFmpeg's escaping rules for Windows paths.
+    public static Job Start(string args, string workDir) {
         var psi = new ProcessStartInfo(FFmpeg, args);
+        if (workDir != null) psi.WorkingDirectory = workDir;
         psi.UseShellExecute = false;
         psi.CreateNoWindow = true;
         psi.RedirectStandardInput = true;
@@ -155,11 +160,12 @@ static class FF {
         return job.Out.Result + job.Err.Result;
     }
 
-    public static List<string> Microphones() {
-        var list = new List<string>();
-        foreach (Match m in Regex.Matches(Run("-hide_banner -list_devices true -f dshow -i dummy"), "\"([^\"]+)\" \\(audio\\)"))
-            list.Add(m.Groups[1].Value);
-        return list;
+    // DirectShow microphones and cameras.
+    public static void Devices(out List<string> mics, out List<string> cams) {
+        mics = new List<string>();
+        cams = new List<string>();
+        foreach (Match m in Regex.Matches(Run("-hide_banner -list_devices true -f dshow -i dummy"), "\"([^\"]+)\" \\((audio|video)\\)"))
+            (m.Groups[2].Value == "audio" ? mics : cams).Add(m.Groups[1].Value);
     }
 
     // Duration in seconds and number of audio streams of a media file.
@@ -183,6 +189,8 @@ class Settings {
     public string Mic = "";
     public string Area = "";        // last selected area: x,y,w,h in physical pixels
     public bool MicOn = true, SystemAudio = true, Cursor = true, Clicks = true, Countdown = true, KeepLossless = false, AutoUpdate = true;
+    public bool Camera = false, Subtitles = false;
+    public string CameraDevice = "", CameraSize = "M", SubStyle = "track", SubModel = "accurate";
 
     static string FilePath {
         get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MakeMyWebScreenRecorder", "settings.ini"); }
@@ -210,6 +218,12 @@ class Settings {
                     case "Countdown": s.Countdown = b; break;
                     case "KeepLossless": s.KeepLossless = b; break;
                     case "AutoUpdate": s.AutoUpdate = b; break;
+                    case "Camera": s.Camera = b; break;
+                    case "CameraDevice": s.CameraDevice = v; break;
+                    case "CameraSize": s.CameraSize = v; break;
+                    case "Subtitles": s.Subtitles = b; break;
+                    case "SubStyle": s.SubStyle = v; break;
+                    case "SubModel": s.SubModel = v; break;
                 }
             }
         } catch { }
@@ -222,7 +236,9 @@ class Settings {
             File.WriteAllLines(FilePath, new[] {
                 "Folder=" + Folder, "Mode=" + Mode, "Fps=" + Fps, "Mic=" + Mic, "Area=" + Area,
                 "MicOn=" + B(MicOn), "SystemAudio=" + B(SystemAudio), "Cursor=" + B(Cursor),
-                "Clicks=" + B(Clicks), "Countdown=" + B(Countdown), "KeepLossless=" + B(KeepLossless), "AutoUpdate=" + B(AutoUpdate)
+                "Clicks=" + B(Clicks), "Countdown=" + B(Countdown), "KeepLossless=" + B(KeepLossless), "AutoUpdate=" + B(AutoUpdate),
+                "Camera=" + B(Camera), "CameraDevice=" + CameraDevice, "CameraSize=" + CameraSize,
+                "Subtitles=" + B(Subtitles), "SubStyle=" + SubStyle, "SubModel=" + SubModel
             }, Encoding.UTF8);
         } catch { }
     }

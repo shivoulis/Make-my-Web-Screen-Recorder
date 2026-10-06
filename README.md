@@ -4,6 +4,8 @@ A simple, modern screen recorder for Windows 10/11.
 
 - Record the **entire screen**, a **single window**, a **selected area** (drag to choose), or a **browser tab** (Chrome, Edge, Brave — records just the page, without the browser toolbars)
 - **Microphone** and **system audio** ("what you hear"), each with an on/off switch
+- **Webcam bubble**: round, draggable camera overlay in the corner of the recording (S/M/L)
+- **Automatic subtitles**: local speech-to-text with Whisper (language detected automatically) as a switchable subtitle track + `.srt` file, or burned into the video
 - Floating **control bar** while recording: timer, pause/resume, mute mic, discard, stop — hidden from the recording itself
 - Red **frame** around the recorded area, optional **3-2-1 countdown**, optional **click highlights**
 - Saves small, **visually lossless MP4** files that play everywhere (captured losslessly, then compressed with H.264 CRF 18)
@@ -49,9 +51,13 @@ Installed copies check GitHub on startup and offer the update with one click.
 | `src/Overlays.cs` | Control bar, countdown and recording frame (excluded from capture) |
 | `src/AreaPicker.cs` | Drag-to-select overlay for recording part of the screen |
 | `src/Theme.cs` | Dark theme and control styles |
+| `src/Camera.cs` | Webcam bubble (camera frames via FFmpeg) |
+| `src/Subtitles.cs` | Whisper transcription (FFmpeg's `whisper` filter), model download, embedding/burning subtitles |
 | `src/Updater.cs` | Checks GitHub Releases, downloads and verifies the installer, runs it silently |
 | `release.ps1` | Builds and publishes a GitHub release |
 | `installer.iss` | Inno Setup installer script |
+
+Speech models are downloaded on first use to `%LOCALAPPDATA%\MakeMyWebScreenRecorder\models` (from Hugging Face: whisper.cpp `ggml-base` / `ggml-large-v3-turbo-q5_0` and the Silero VAD model).
 
 Settings are stored in `%APPDATA%\MakeMyWebScreenRecorder\settings.ini`; crashes are logged to `error.log` in the same folder.
 For screenshots while developing, set `MMWSR_SHOW_OVERLAYS=1` to stop the overlays being hidden from capture.

@@ -109,10 +109,25 @@ class MainWindow : Window {
         </Border>
         <TextBlock x:Name='SourceHint' Style='{StaticResource Hint}' Margin='2,8,0,0'/>
 
-        <TextBlock Text='AUDIO' Style='{StaticResource Caption}' Margin='0,22,0,0'/>
+        <TextBlock Text='CAMERA, AUDIO &amp; SUBTITLES' Style='{StaticResource Caption}' Margin='0,22,0,0'/>
         <Border Background='{StaticResource Card}' CornerRadius='12' Padding='16,4,16,6' Margin='0,8,0,0'>
           <StackPanel>
-            <CheckBox x:Name='ChkMic' Style='{StaticResource Switch}'>
+            <CheckBox x:Name='ChkCam' AutomationProperties.Name='Camera' Style='{StaticResource Switch}'>
+              <StackPanel Orientation='Horizontal'>
+                <TextBlock Style='{StaticResource Icon}' Text='&#xE714;' Margin='0,0,12,0'/>
+                <StackPanel>
+                  <TextBlock Text='Camera'/>
+                  <TextBlock Text='Round video bubble in the corner, drag to move' FontSize='11.5' Foreground='{StaticResource Muted}'/>
+                </StackPanel>
+              </StackPanel>
+            </CheckBox>
+            <ComboBox x:Name='CbCam' Height='36' Margin='0,2,0,10' Visibility='Collapsed'>
+              <ComboBox.ItemTemplate>
+                <DataTemplate><TextBlock Text='{Binding}' TextTrimming='CharacterEllipsis' FontSize='12.5'/></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Border Height='1' Background='{StaticResource Line}' Margin='-16,0,-16,4'/>
+            <CheckBox x:Name='ChkMic' AutomationProperties.Name='Microphone' Style='{StaticResource Switch}'>
               <StackPanel Orientation='Horizontal'>
                 <TextBlock Style='{StaticResource Icon}' Text='&#xE720;' Margin='0,0,12,0'/>
                 <TextBlock Text='Microphone' VerticalAlignment='Center'/>
@@ -124,7 +139,7 @@ class MainWindow : Window {
               </ComboBox.ItemTemplate>
             </ComboBox>
             <Border Height='1' Background='{StaticResource Line}' Margin='-16,0'/>
-            <CheckBox x:Name='ChkSys' Style='{StaticResource Switch}' Margin='0,6,0,0'>
+            <CheckBox x:Name='ChkSys' AutomationProperties.Name='System audio' Style='{StaticResource Switch}' Margin='0,6,0,0'>
               <StackPanel Orientation='Horizontal'>
                 <TextBlock Style='{StaticResource Icon}' Text='&#xE767;' Margin='0,0,12,0'/>
                 <StackPanel>
@@ -133,6 +148,22 @@ class MainWindow : Window {
                 </StackPanel>
               </StackPanel>
             </CheckBox>
+            <Border Height='1' Background='{StaticResource Line}' Margin='-16,6,-16,4'/>
+            <CheckBox x:Name='ChkSubs' AutomationProperties.Name='Subtitles' Style='{StaticResource Switch}'>
+              <StackPanel Orientation='Horizontal'>
+                <TextBlock Style='{StaticResource Icon}' Text='&#xE7F0;' Margin='0,0,12,0'/>
+                <StackPanel>
+                  <TextBlock Text='Subtitles'/>
+                  <TextBlock Text='Transcribed automatically, any language' FontSize='11.5' Foreground='{StaticResource Muted}'/>
+                </StackPanel>
+              </StackPanel>
+            </CheckBox>
+            <Border x:Name='SubStyleRow' HorizontalAlignment='Left' Background='{StaticResource Card2}' CornerRadius='9' Padding='3' Margin='30,0,0,8' Visibility='Collapsed'>
+              <StackPanel Orientation='Horizontal'>
+                <RadioButton x:Name='SubTrack' GroupName='substyle' Style='{StaticResource Pill}' Content='Subtitle track + .srt' ToolTip='Viewers can switch the subtitles on or off'/>
+                <RadioButton x:Name='SubBurn' GroupName='substyle' Style='{StaticResource Pill}' Content='Burned into video' ToolTip='Always visible, e.g. for social media'/>
+              </StackPanel>
+            </Border>
           </StackPanel>
         </Border>
 
@@ -179,11 +210,33 @@ class MainWindow : Window {
               </StackPanel>
             </Border>
           </Grid>
+          <Grid Height='44'>
+            <TextBlock Text='Camera size' VerticalAlignment='Center' FontSize='13.5'/>
+            <Border HorizontalAlignment='Right' VerticalAlignment='Center' Background='{StaticResource Card}' CornerRadius='9' Padding='3'>
+              <StackPanel Orientation='Horizontal'>
+                <RadioButton x:Name='CamS' GroupName='camsize' Style='{StaticResource Pill}' Content='S'/>
+                <RadioButton x:Name='CamM' GroupName='camsize' Style='{StaticResource Pill}' Content='M'/>
+                <RadioButton x:Name='CamL' GroupName='camsize' Style='{StaticResource Pill}' Content='L'/>
+              </StackPanel>
+            </Border>
+          </Grid>
+          <Grid Height='44'>
+            <StackPanel VerticalAlignment='Center'>
+              <TextBlock Text='Subtitle accuracy' FontSize='13.5'/>
+              <TextBlock x:Name='SubModelHint' FontSize='11' Foreground='{StaticResource Muted}'/>
+            </StackPanel>
+            <Border HorizontalAlignment='Right' VerticalAlignment='Center' Background='{StaticResource Card}' CornerRadius='9' Padding='3'>
+              <StackPanel Orientation='Horizontal'>
+                <RadioButton x:Name='SubFast' GroupName='submodel' Style='{StaticResource Pill}' Content='Fast'/>
+                <RadioButton x:Name='SubAccurate' GroupName='submodel' Style='{StaticResource Pill}' Content='Accurate'/>
+              </StackPanel>
+            </Border>
+          </Grid>
           <CheckBox x:Name='ChkCursor' Style='{StaticResource Switch}' Content='Show mouse cursor'/>
           <CheckBox x:Name='ChkClicks' Style='{StaticResource Switch}' Content='Highlight mouse clicks'/>
           <CheckBox x:Name='ChkCountdown' Style='{StaticResource Switch}' Content='3-second countdown'/>
           <CheckBox x:Name='ChkUpdates' Style='{StaticResource Switch}' Content='Check for updates automatically'/>
-          <CheckBox x:Name='ChkKeep' Style='{StaticResource Switch}'>
+          <CheckBox x:Name='ChkKeep' AutomationProperties.Name='Keep uncompressed original' Style='{StaticResource Switch}'>
             <StackPanel Margin='0,4'>
               <TextBlock Text='Keep uncompressed original'/>
               <TextBlock Text='Truly lossless, but very large files' FontSize='11.5' Foreground='{StaticResource Muted}'/>
@@ -214,6 +267,8 @@ class MainWindow : Window {
     RegionFrame frame;
     Job job;
     UpdateInfo update;
+    CameraBubble camera;
+    bool downloadingModel;
     bool updating;
 
     T F<T>(string name) { return (T)root.FindName(name); }
@@ -267,9 +322,23 @@ class MainWindow : Window {
         cbMic.SelectedIndex = 0;
         cbMic.IsEnabled = false;
         F<CheckBox>("ChkMic").IsChecked = settings.MicOn;
-        F<CheckBox>("ChkMic").Click += delegate { UpdateUi(); };
+        F<CheckBox>("ChkMic").Checked += delegate { UpdateUi(); };
+        F<CheckBox>("ChkMic").Unchecked += delegate { UpdateUi(); };
         F<CheckBox>("ChkSys").IsChecked = settings.SystemAudio;
-        LoadMicrophones();
+        F<CheckBox>("ChkCam").IsChecked = settings.Camera;
+        F<CheckBox>("ChkCam").Checked += delegate { UpdateUi(); };
+        F<CheckBox>("ChkCam").Unchecked += delegate { UpdateUi(); };
+        F<CheckBox>("ChkSubs").IsChecked = settings.Subtitles;
+        F<CheckBox>("ChkSubs").Checked += async delegate {
+            UpdateUi();
+            if (!Subtitles.HasModel(SubModel()) && !await EnsureModel(SubModel())) F<CheckBox>("ChkSubs").IsChecked = false;
+        };
+        F<CheckBox>("ChkSubs").Unchecked += delegate { UpdateUi(); };
+        F<RadioButton>(settings.SubStyle == Subtitles.Burn ? "SubBurn" : "SubTrack").IsChecked = true;
+        F<RadioButton>(settings.SubModel == Subtitles.Fast ? "SubFast" : "SubAccurate").IsChecked = true;
+        F<RadioButton>(settings.CameraSize == "S" ? "CamS" : settings.CameraSize == "L" ? "CamL" : "CamM").IsChecked = true;
+        foreach (var n in new[] { "SubFast", "SubAccurate" }) F<RadioButton>(n).Checked += delegate { UpdateUi(); };
+        LoadDevices();
 
         // Options
         F<RadioButton>(settings.Fps == "60" ? "Fps60" : "Fps30").IsChecked = true;
@@ -313,6 +382,9 @@ class MainWindow : Window {
 
     bool On(string name) { return F<CheckBox>(name).IsChecked == true; }
 
+    string SubModel() { return F<RadioButton>("SubFast").IsChecked == true ? Subtitles.Fast : Subtitles.Accurate; }
+    string SubStyle() { return F<RadioButton>("SubBurn").IsChecked == true ? Subtitles.Burn : Subtitles.Track; }
+
     void Error(string msg) {
         if (IsVisible) MessageBox.Show(this, msg, Program.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
         else MessageBox.Show(msg, Program.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -330,6 +402,13 @@ class MainWindow : Window {
         settings.Countdown = On("ChkCountdown");
         settings.KeepLossless = On("ChkKeep");
         settings.AutoUpdate = On("ChkUpdates");
+        settings.Camera = On("ChkCam");
+        var cam = F<ComboBox>("CbCam");
+        if (cam.Tag as string == "ready" && cam.SelectedItem != null) settings.CameraDevice = (string)cam.SelectedItem;
+        settings.CameraSize = F<RadioButton>("CamS").IsChecked == true ? "S" : F<RadioButton>("CamL").IsChecked == true ? "L" : "M";
+        settings.Subtitles = On("ChkSubs");
+        settings.SubStyle = SubStyle();
+        settings.SubModel = SubModel();
         settings.Save();
     }
 
@@ -344,11 +423,28 @@ class MainWindow : Window {
         cbMic.IsEnabled = haveMics && On("ChkMic");
         F<CheckBox>("ChkMic").IsEnabled = haveMics;
         F<TextBlock>("FolderPath").Text = settings.Folder;
+        var cbCam = F<ComboBox>("CbCam");
+        bool haveCams = cbCam.Tag as string == "ready";
+        F<CheckBox>("ChkCam").IsEnabled = haveCams;
+        cbCam.Visibility = haveCams && On("ChkCam") ? Visibility.Visible : Visibility.Collapsed;
+        F<Border>("SubStyleRow").Visibility = On("ChkSubs") ? Visibility.Visible : Visibility.Collapsed;
+        F<TextBlock>("SubModelHint").Text = SubModel() == Subtitles.Fast ? "Quicker, less accurate" : "Best for Greek, slower";
+        if (downloadingModel) btn.IsEnabled = false;
     }
 
-    async void LoadMicrophones() {
-        List<string> mics;
-        try { mics = await Task.Run(() => FF.Microphones()); } catch { mics = new List<string>(); }
+    async void LoadDevices() {
+        List<string> mics = new List<string>(), cams = new List<string>();
+        try { await Task.Run(() => FF.Devices(out mics, out cams)); } catch { }
+        var cc = F<ComboBox>("CbCam");
+        if (cams.Count == 0) {
+            cc.ItemsSource = new[] { "No camera found" };
+            cc.SelectedIndex = 0;
+            F<CheckBox>("ChkCam").IsChecked = false;
+        } else {
+            cc.ItemsSource = cams;
+            cc.SelectedItem = cams.Contains(settings.CameraDevice) ? settings.CameraDevice : cams[0];
+            cc.Tag = "ready";
+        }
         var cb = F<ComboBox>("CbMic");
         if (mics.Count == 0) {
             cb.ItemsSource = new[] { "No microphone found" };
@@ -567,11 +663,20 @@ class MainWindow : Window {
 
             SrcItem monitor; int[] region, abs;
             string err = Resolve(src, out monitor, out region, out abs);
+            if (err == null && On("ChkCam") && F<ComboBox>("CbCam").Tag as string == "ready") {
+                // Start the camera early so it is live by the time recording begins.
+                camera = new CameraBubble((string)F<ComboBox>("CbCam").SelectedItem, settings.CameraSize, scale);
+                camera.ShowInCorner(abs, scale);
+            }
             if (err == null && On("ChkCountdown")) {
                 await Overlay.Countdown(monitor);
                 err = Resolve(src, out monitor, out region, out abs);     // the window may have moved
             }
-            if (err != null) { Show(); Error(err); return; }
+            if (err == null && camera != null) {
+                await Task.WhenAny(camera.Ready, Task.Delay(5000));
+                if (camera.Ready.IsCompleted && camera.Ready.Result != null) err = camera.Ready.Result;
+            }
+            if (err != null) { CloseOverlays(); Show(); Error(err); return; }
 
             var o = new RecordOptions();
             o.Screen = monitor;
@@ -582,7 +687,7 @@ class MainWindow : Window {
             o.Fps = settings.Fps == "60" ? 60 : 30;
             o.Folder = settings.Folder;
             session = Session.Start(o, out err);
-            if (session == null) { Show(); Error(err); return; }
+            if (session == null) { CloseOverlays(); Show(); Error(err); return; }
 
             frame = new RegionFrame(abs, src.Kind == "screen" || src.Kind == "desktop");
             bar = new ControlBar(session.HasMic);
@@ -594,6 +699,7 @@ class MainWindow : Window {
             tray.Visible = true;
             if (On("ChkClicks")) ClickEffects.Start(scale);
         } catch (Exception e) {
+            CloseOverlays();
             Show();
             Error("Could not start recording:\n" + e.Message);
         } finally {
@@ -614,6 +720,7 @@ class MainWindow : Window {
         tray.Visible = false;
         if (bar != null) { bar.Close(); bar = null; }
         if (frame != null) { frame.Close(); frame = null; }
+        if (camera != null) { camera.Close(); camera = null; }
     }
 
     void BackToMain() {
@@ -636,6 +743,10 @@ class MainWindow : Window {
         string dst = s.RawFile.Replace(" (uncompressed).mkv", ".mp4");
         StartEncode(s.RawFile, dst, Encode.Best, tracks, s.HasMic, s.Pauses, s.Mutes, s.Fps,
                     "Compressing recording", On("ChkKeep") ? null : s.RawFile);
+        if (job != null && tracks > 0 && On("ChkSubs")) {
+            string style = SubStyle(), model = SubModel();
+            job.Then = delegate { MakeSubtitles(dst, style, model); };
+        }
     }
 
     void DiscardRecording() {
@@ -657,11 +768,16 @@ class MainWindow : Window {
         if (tracks < 0) tracks = Math.Min(found, 2);
         double outDur;
         string args = Encode.Args(src, dst, quality, tracks, micFirst, pauses, mutes, fps, srcDur, progress, out outDur);
-        try { job = FF.Start(args); }
+        RunJob(args, null, dst, outDur, progress, verb, deleteWhenDone);
+    }
+
+    // Runs one FFmpeg step in the background with progress shown in the recordings card.
+    void RunJob(string args, string workDir, string output, double duration, string progressFile, string verb, string deleteWhenDone) {
+        try { job = FF.Start(args, workDir); }
         catch (Exception e) { Error("Could not start FFmpeg:\n" + e.Message); return; }
-        job.File = dst;
-        job.Duration = outDur;
-        job.ProgressFile = progress;
+        job.File = output;
+        job.Duration = duration;
+        job.ProgressFile = progressFile;
         job.Verb = verb;
         job.DeleteWhenDone = deleteWhenDone;
         F<Border>("BusyCard").Visibility = Visibility.Visible;
@@ -680,9 +796,14 @@ class MainWindow : Window {
             try { File.Delete(j.ProgressFile); } catch { }
             if (j.Proc.ExitCode == 0) {
                 if (j.DeleteWhenDone != null) try { File.Delete(j.DeleteWhenDone); } catch { }
+                if (j.Then != null) {
+                    try { j.Then(); } catch (Exception e) { Error(e.Message); }
+                    if (job != null) { RefreshRecents(); UpdateUi(); return; }
+                }
             } else {
                 try { File.Delete(j.File); } catch { }
-                Error(j.Verb + " failed." + (j.DeleteWhenDone != null ? " The uncompressed recording has been kept." : "") + "\n\n" + j.ErrorTail());
+                Error(j.Verb + " failed." + (j.DeleteWhenDone != null ? " The uncompressed recording has been kept." : "") +
+                      (j.Verb.Contains("ubtitle") ? " The recording itself is fine." : "") + "\n\n" + j.ErrorTail());
             }
             RefreshRecents();
             UpdateUi();
@@ -694,6 +815,79 @@ class MainWindow : Window {
             F<ProgressBar>("BusyBar").Value = pct;
             F<TextBlock>("BusyPct").Text = pct + "%";
         }
+    }
+
+    // ---- subtitles ---------------------------------------------------------------------------
+
+    // Downloads the speech model if needed (asking first). Returns true when it is available.
+    async Task<bool> EnsureModel(string quality) {
+        if (Subtitles.HasModel(quality)) return true;
+        if (downloadingModel) return false;
+        var r = MessageBox.Show(this, "Subtitles need a one-time download of the speech model (" + Subtitles.ModelMB(quality) +
+            " MB). It runs on your PC, so your recordings are never uploaded.\n\nDownload it now?", Program.AppName, MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (r != MessageBoxResult.Yes) return false;
+        downloadingModel = true;
+        F<Border>("BusyCard").Visibility = Visibility.Visible;
+        F<TextBlock>("BusyText").Text = "Downloading speech model (" + Subtitles.ModelMB(quality) + " MB)...";
+        F<TextBlock>("BusyPct").Text = "";
+        F<ProgressBar>("BusyBar").Value = 0;
+        UpdateUi();
+        try {
+            await Subtitles.Download(quality, p => Dispatcher.BeginInvoke(new Action(() => {
+                F<ProgressBar>("BusyBar").Value = p;
+                F<TextBlock>("BusyPct").Text = p + "%";
+            })));
+            return true;
+        } catch (Exception e) {
+            Error("The speech model couldn't be downloaded:\n" + e.Message);
+            return false;
+        } finally {
+            downloadingModel = false;
+            if (job == null) F<Border>("BusyCard").Visibility = Visibility.Collapsed;
+            UpdateUi();
+        }
+    }
+
+    // Transcribes a recording, saves a .srt next to it, then embeds or burns in the subtitles.
+    async void MakeSubtitles(string video, string style, string quality) {
+        if (job != null) { Error("Please wait until the current " + job.Verb.ToLowerInvariant() + " finishes."); return; }
+        if (!await EnsureModel(quality)) return;
+        int audio;
+        double dur = FF.Probe(video, out audio);
+        if (audio == 0) { Error("This recording has no sound, so there is nothing to transcribe."); return; }
+
+        string dir = Path.GetDirectoryName(video);
+        string tag = "mmwsr-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        string tmpSrtName = tag + ".srt", tmpSrt = Path.Combine(dir, tmpSrtName);
+        string finalSrt = Path.ChangeExtension(video, ".srt");
+        string tmpVideo = Path.Combine(dir, tag + ".mp4");
+        string progress = Path.Combine(Path.GetTempPath(), tag + ".txt");
+
+        RunJob(Subtitles.TranscribeArgs(video, tmpSrtName, quality, progress), dir, tmpSrt, dur, progress, "Creating subtitles", null);
+        if (job == null) return;
+        job.Then = delegate {
+            if (!Subtitles.Tidy(tmpSrt)) {
+                try { File.Delete(tmpSrt); } catch { }
+                MessageBox.Show(this, "No speech was found in this recording, so no subtitles were made.", Program.AppName, MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            string args = style == Subtitles.Burn
+                ? Subtitles.BurnArgs(video, tmpSrtName, tmpVideo, progress)
+                : Subtitles.EmbedArgs(video, tmpSrt, tmpVideo, progress);
+            RunJob(args, dir, tmpVideo, dur, progress, style == Subtitles.Burn ? "Adding subtitles to the video" : "Adding subtitles", null);
+            if (job == null) return;
+            job.Then = delegate {
+                try { File.Copy(tmpSrt, finalSrt, true); File.Delete(tmpSrt); } catch { }
+                try {
+                    File.Delete(video);
+                    File.Move(tmpVideo, video);
+                } catch {
+                    // The original is probably open in a player; keep the subtitled copy next to it.
+                    string alt = Path.Combine(dir, Path.GetFileNameWithoutExtension(video) + " (subtitles).mp4");
+                    try { File.Move(tmpVideo, alt); } catch { }
+                }
+            };
+        };
     }
 
     void Tick() {
@@ -727,8 +921,8 @@ class MainWindow : Window {
             var dir = new DirectoryInfo(settings.Folder);
             if (dir.Exists)
                 files = dir.GetFiles("*.mp4").Concat(dir.GetFiles("*.mkv"))
-                           .Where(f => !skip.Contains(f.FullName))
-                           .OrderByDescending(f => f.LastWriteTime).Take(4).ToList();
+                           .Where(f => !skip.Contains(f.FullName) && !f.Name.StartsWith("mmwsr-"))
+                           .OrderByDescending(f => f.LastWriteTime).Take(3).ToList();
         } catch { }
         foreach (var f in files) list.Children.Add(MakeRow(f));
         F<TextBlock>("EmptyText").Visibility = files.Count == 0 && job == null ? Visibility.Visible : Visibility.Collapsed;
@@ -772,7 +966,8 @@ class MainWindow : Window {
         var text = new StackPanel { Margin = new Thickness(12, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(new TextBlock { Text = Pretty(f), FontSize = 13.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
         text.Children.Add(new TextBlock {
-            Text = Size(f.Length) + "  ·  " + (lossless ? "Uncompressed MKV" : "MP4"),
+            Text = Size(f.Length) + "  ·  " + (lossless ? "Uncompressed MKV" : "MP4") +
+                   (File.Exists(Path.ChangeExtension(f.FullName, ".srt")) ? "  ·  Subtitles" : ""),
             FontSize = 11.5, Foreground = (Brush)FindResource("Muted"), Margin = new Thickness(0, 1, 0, 0)
         });
         Grid.SetColumn(text, 1);
@@ -785,9 +980,11 @@ class MainWindow : Window {
         row.Content = g;
 
         row.Click += delegate { Play(f.FullName); };
-        more.Click += delegate {
+        more.Click += delegate(object s, RoutedEventArgs e) {
+            e.Handled = true;     // don't let the click reach the row (which would start playback)
             var menu = new ContextMenu();
             menu.Items.Add(Item("Show in folder", "", delegate { Process.Start("explorer.exe", "/select,\"" + f.FullName + "\""); }));
+            if (!lossless) menu.Items.Add(Item(File.Exists(Path.ChangeExtension(f.FullName, ".srt")) ? "Redo subtitles" : "Create subtitles", "", delegate { MakeSubtitles(f.FullName, SubStyle(), SubModel()); }));
             menu.Items.Add(Item("Export as high-quality MP4", "", delegate { Export(f.FullName, Encode.Best); }));
             menu.Items.Add(Item("Export as extra-small MP4", "", delegate { Export(f.FullName, Encode.Small); }));
             if (lossless) menu.Items.Add(Item("Export as lossless MKV", "", delegate { Export(f.FullName, Encode.Lossless); }));
@@ -844,6 +1041,10 @@ class MainWindow : Window {
         try {
             Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(file, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
                 Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+            string srt = Path.ChangeExtension(file, ".srt");
+            if (File.Exists(srt))
+                Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(srt, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
         } catch (Exception e) { Error(e.Message); }
         RefreshRecents();
     }
