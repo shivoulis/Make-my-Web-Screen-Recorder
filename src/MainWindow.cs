@@ -742,7 +742,7 @@ class MainWindow : Window {
         int tracks = (s.HasMic ? 1 : 0) + (s.HasSys ? 1 : 0);
         string dst = s.RawFile.Replace(" (uncompressed).mkv", ".mp4");
         StartEncode(s.RawFile, dst, Encode.Best, tracks, s.HasMic, s.Pauses, s.Mutes, s.Fps,
-                    "Compressing recording", On("ChkKeep") ? null : s.RawFile);
+                    "Compressing recording", On("ChkKeep") ? null : s.RawFile, true);
         if (job != null && tracks > 0 && On("ChkSubs")) {
             string style = SubStyle(), model = SubModel();
             job.Then = delegate { MakeSubtitles(dst, style, model); };
@@ -761,13 +761,14 @@ class MainWindow : Window {
     // ---- compression / export ------------------------------------------------------------------
 
     void StartEncode(string src, string dst, string quality, int tracks, bool micFirst,
-                     List<double[]> pauses, List<double[]> mutes, int fps, string verb, string deleteWhenDone) {
+                     List<double[]> pauses, List<double[]> mutes, int fps, string verb, string deleteWhenDone, bool freshCapture = false) {
         string progress = Path.Combine(Path.GetTempPath(), "mmwsr-enc-" + Guid.NewGuid() + ".txt");
         int found;
         double srcDur = FF.Probe(src, out found);
         if (tracks < 0) tracks = Math.Min(found, 2);
+        double startAt = freshCapture ? FF.LeadIn(src) : 0;
         double outDur;
-        string args = Encode.Args(src, dst, quality, tracks, micFirst, pauses, mutes, fps, srcDur, progress, out outDur);
+        string args = Encode.Args(src, dst, quality, tracks, micFirst, pauses, mutes, fps, srcDur, startAt, progress, out outDur);
         RunJob(args, null, dst, outDur, progress, verb, deleteWhenDone);
     }
 

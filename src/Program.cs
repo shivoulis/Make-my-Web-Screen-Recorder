@@ -168,6 +168,18 @@ static class FF {
             (m.Groups[2].Value == "audio" ? mics : cams).Add(m.Groups[1].Value);
     }
 
+    // When capture starts, the first screen frame is followed by a pause of about a second while the audio
+    // devices open, which shows as a frozen start. Returns the time of the first frame after that gap (or 0).
+    public static double LeadIn(string file) {
+        var times = new List<double>();
+        foreach (Match m in Regex.Matches(Run("-hide_banner -t 4 -i " + Q(file) + " -map 0:v:0 -vf showinfo -f null -"), @"pts_time:\s*([\d.]+)"))
+            times.Add(double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture));
+        double start = 0;
+        for (int i = 1; i < times.Count; i++)
+            if (times[i] - times[i - 1] > 0.3) start = times[i];
+        return start;
+    }
+
     // Duration in seconds and number of audio streams of a media file.
     public static double Probe(string file, out int audioStreams) {
         string info = Run("-hide_banner -i " + Q(file));

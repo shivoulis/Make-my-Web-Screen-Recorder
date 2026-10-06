@@ -155,12 +155,21 @@ static class Encode {
     public const string Best = "best", Small = "small", Lossless = "lossless";
 
     // audioTracks: number of audio tracks in the source. If micFirst, track 0 is the microphone
-    // (mutes apply to it). Pauses are cut out, mutes silenced. Returns the output duration via outDuration.
+    // (mutes apply to it). Pauses are cut out, mutes silenced. Everything before startAt (seconds) is
+    // dropped from picture and sound. Returns the output duration via outDuration.
     public static string Args(string src, string dst, string quality, int audioTracks, bool micFirst,
                               List<double[]> pauses, List<double[]> mutes, int fps, double srcDuration,
                               string progressFile, out double outDuration) {
-        pauses = pauses ?? new List<double[]>();
-        mutes = mutes ?? new List<double[]>();
+        return Args(src, dst, quality, audioTracks, micFirst, pauses, mutes, fps, srcDuration, 0, progressFile, out outDuration);
+    }
+
+    public static string Args(string src, string dst, string quality, int audioTracks, bool micFirst,
+                              List<double[]> pauses, List<double[]> mutes, int fps, double srcDuration, double startAt,
+                              string progressFile, out double outDuration) {
+        // Shift pause/mute times so they are relative to the trimmed start.
+        pauses = Shift(pauses, startAt);
+        mutes = Shift(mutes, startAt);
+        srcDuration = Math.Max(0, srcDuration - startAt);
         outDuration = srcDuration;
         foreach (var p in pauses) outDuration -= Math.Max(0, Math.Min(p[1], srcDuration) - Math.Min(p[0], srcDuration));
 
@@ -174,13 +183,15 @@ static class Encode {
         var graph = new List<string>();
 
         // Video: even size, cut pauses, 4:2:0 for universal playback.
-        string v = "[0:v]crop=trunc(iw/2)*2:trunc(ih/2)*2";
+        string trimV = startAt > 0 ? "trim=start=" + FF.Num(startAt) + ",setpts=PTS-STARTPTS," : "";
+        string trimA = startAt > 0 ? "atrim=start=" + FF.Num(startAt) + ",asetpts=PTS-STARTPTS," : "";
+        string v = "[0:v]" + trimV + "crop=trunc(iw/2)*2:trunc(ih/2)*2";
         if (keep != null) v += ",select='" + keep + "',setpts=N/(" + fps + "*TB)";
         graph.Add(v + ",format=yuv420p[v]");
 
         // Audio: silence mic mutes, mix mic + system, cut pauses.
         if (audioTracks > 0) {
-            string first = "[0:a:0]";
+            string first = "[0:a:0]" + trimA;
             if (micFirst && mutes.Count > 0)
                 first += "volume=0:enable='" + string.Join("+", mutes.Select(m => Between(m)).ToArray()) + "'";
             else
@@ -188,7 +199,8 @@ static class Encode {
             string a;
             if (audioTracks > 1) {
                 graph.Add(first + "[a0]");
-                a = "[a0][0:a:1]amix=inputs=2:duration=longest:normalize=0";
+                graph.Add("[0:a:1]" + trimA + "anull[a1]");
+                a = "[a0][a1]amix=inputs=2:duration=longest:normalize=0";
             } else {
                 a = first;
             }
@@ -201,6 +213,16 @@ static class Encode {
             : "-c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k";
         return head + "-filter_complex " + FF.Q(string.Join(";", graph.ToArray())) + " -map \"[v]\"" +
                (audioTracks > 0 ? " -map \"[a]\"" : "") + " " + opts + " -movflags +faststart" + tail;
+    }
+
+    static List<double[]> Shift(List<double[]> ranges, double by) {
+        var list = new List<double[]>();
+        if (ranges == null) return list;
+        foreach (var r in ranges) {
+            double a = r[0] - by, b = r[1] - by;
+            if (b > 0) list.Add(new[] { Math.Max(0, a), b });
+        }
+        return list;
     }
 
     static string Between(double[] range) { return "between(t," + FF.Num(range[0]) + "," + FF.Num(range[1]) + ")"; }
