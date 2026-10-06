@@ -1,4 +1,4 @@
-﻿; Inno Setup script for Make my Web Screen Recorder. Built by build.ps1.
+; Inno Setup script for Make my Web Screen Recorder. Built by build.ps1.
 
 #define AppName "Make my Web Screen Recorder"
 #define AppVersion "2.1.0"
@@ -27,6 +27,7 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
 WizardStyle=modern
+LicenseFile=LICENSE
 CloseApplications=yes
 
 [Tasks]

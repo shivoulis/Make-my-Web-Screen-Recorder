@@ -2,6 +2,8 @@
 // Records the screen, a window or a browser tab, plus microphone and/or system audio. Capture is
 // lossless; when you stop, it is compressed to a small, visually lossless MP4 (H.264 CRF 18 + AAC).
 //
+// Copyright (C) 2026 shivoulis. Licensed under the GNU General Public License v3 or later; see LICENSE.
+//
 // This file: entry point, FFmpeg helpers, settings, Win32 helpers, system-audio capture, click effects.
 
 using System;
@@ -23,6 +25,7 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Make my Web Screen Recorder")]
 [assembly: AssemblyProduct("Make my Web Screen Recorder")]
 [assembly: AssemblyDescription("Screen, window and browser-tab recorder")]
+[assembly: AssemblyCopyright("Copyright (C) 2026 shivoulis. Licensed under the GNU GPL v3 or later.")]
 [assembly: AssemblyVersion("2.1.0.0")]
 [assembly: AssemblyFileVersion("2.1.0.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]

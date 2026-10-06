@@ -45,6 +45,12 @@ The build copies `ffmpeg.exe` and `ffplay.exe` next to the app, so the installer
 Settings are stored in `%APPDATA%\MakeMyWebScreenRecorder\settings.ini`; crashes are logged to `error.log` in the same folder.
 For screenshots while developing, set `MMWSR_SHOW_OVERLAYS=1` to stop the overlays being hidden from capture.
 
+## Licence
+
+Copyright (C) 2026 shivoulis
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY. See [LICENSE](LICENSE) for the full text.
+
 ## Third-party software
 
 The installer bundles [FFmpeg](https://ffmpeg.org) (GPL build by [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)); its licence is installed in `ffmpeg\LICENSE.txt`.
