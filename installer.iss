@@ -1,7 +1,10 @@
 ; Inno Setup script for Make my Web Screen Recorder. Built by build.ps1.
 
 #define AppName "Make my Web Screen Recorder"
-#define AppVersion "2.1.0"
+; The version comes from src\Program.cs (build.ps1 passes /DAppVersion=...).
+#ifndef AppVersion
+  #define AppVersion "0.0.0"
+#endif
 #define AppExe "MakeMyWebScreenRecorder.exe"
 
 [Setup]
@@ -43,3 +46,5 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; After a silent self-update, start the new version again.
+Filename: "{app}\{#AppExe}"; Flags: nowait; Check: WizardSilent

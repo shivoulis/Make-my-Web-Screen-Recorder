@@ -43,6 +43,28 @@ class MainWindow : Window {
         </StackPanel>
       </Grid>
 
+      <Border x:Name='UpdateBanner' Visibility='Collapsed' Margin='20,0,20,16' Background='#1B2335' BorderBrush='#2D3B5C' BorderThickness='1' CornerRadius='11' Padding='14,10'>
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width='Auto'/>
+              <ColumnDefinition/>
+              <ColumnDefinition Width='Auto'/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Style='{StaticResource Icon}' Text='&#xE896;' Foreground='#7EA6FF' Margin='0,0,12,0'/>
+            <StackPanel Grid.Column='1' VerticalAlignment='Center'>
+              <TextBlock x:Name='UpdateTitle' FontWeight='SemiBold' FontSize='13'/>
+              <TextBlock x:Name='UpdateSub' FontSize='11.5' Foreground='{StaticResource Muted}'/>
+            </StackPanel>
+            <StackPanel Grid.Column='2' Orientation='Horizontal' VerticalAlignment='Center'>
+              <Button x:Name='BtnWhatsNew' Style='{StaticResource LinkButton}' Content='What&apos;s new' Margin='0,0,4,0'/>
+              <Button x:Name='BtnUpdate' Style='{StaticResource PrimaryButton}' Height='32' Width='84' FontSize='13' Content='Update' AutomationProperties.Name='Update now'/>
+            </StackPanel>
+          </Grid>
+          <ProgressBar x:Name='UpdateBar' Margin='0,10,0,0' Maximum='100' Visibility='Collapsed'/>
+        </StackPanel>
+      </Border>
+
       <StackPanel Margin='20,0,20,20'>
         <TextBlock Text='WHAT TO RECORD' Style='{StaticResource Caption}'/>
         <Border Background='{StaticResource Card}' CornerRadius='12' Padding='4' Margin='0,8,0,0'>
@@ -160,12 +182,18 @@ class MainWindow : Window {
           <CheckBox x:Name='ChkCursor' Style='{StaticResource Switch}' Content='Show mouse cursor'/>
           <CheckBox x:Name='ChkClicks' Style='{StaticResource Switch}' Content='Highlight mouse clicks'/>
           <CheckBox x:Name='ChkCountdown' Style='{StaticResource Switch}' Content='3-second countdown'/>
+          <CheckBox x:Name='ChkUpdates' Style='{StaticResource Switch}' Content='Check for updates automatically'/>
           <CheckBox x:Name='ChkKeep' Style='{StaticResource Switch}'>
             <StackPanel Margin='0,4'>
               <TextBlock Text='Keep uncompressed original'/>
               <TextBlock Text='Truly lossless, but very large files' FontSize='11.5' Foreground='{StaticResource Muted}'/>
             </StackPanel>
           </CheckBox>
+          <Border Height='1' Background='{StaticResource Line}' Margin='-16,6,-16,6'/>
+          <Grid Height='36'>
+            <TextBlock x:Name='VersionText' VerticalAlignment='Center' FontSize='12' Foreground='{StaticResource Muted}'/>
+            <Button x:Name='BtnCheckUpdates' Style='{StaticResource LinkButton}' HorizontalAlignment='Right' VerticalAlignment='Center' Margin='0,0,-8,0' Content='Check for updates'/>
+          </Grid>
         </StackPanel>
       </Border>
     </Popup>
@@ -185,6 +213,8 @@ class MainWindow : Window {
     ControlBar bar;
     RegionFrame frame;
     Job job;
+    UpdateInfo update;
+    bool updating;
 
     T F<T>(string name) { return (T)root.FindName(name); }
 
@@ -247,6 +277,11 @@ class MainWindow : Window {
         F<CheckBox>("ChkClicks").IsChecked = settings.Clicks;
         F<CheckBox>("ChkCountdown").IsChecked = settings.Countdown;
         F<CheckBox>("ChkKeep").IsChecked = settings.KeepLossless;
+        F<CheckBox>("ChkUpdates").IsChecked = settings.AutoUpdate;
+        F<TextBlock>("VersionText").Text = "Version " + Updater.Pretty(Updater.Current);
+        F<Button>("BtnCheckUpdates").Click += delegate { F<Popup>("SettingsPopup").IsOpen = false; CheckForUpdates(false); };
+        F<Button>("BtnUpdate").Click += delegate { InstallUpdate(); };
+        F<Button>("BtnWhatsNew").Click += delegate { if (update != null) try { Process.Start(update.PageUrl); } catch { } };
 
         // Actions
         F<Button>("BtnRecord").Click += delegate { StartRecording(); };
@@ -263,6 +298,7 @@ class MainWindow : Window {
 
         RefreshSources();
         RefreshRecents();
+        if (settings.AutoUpdate) CheckForUpdates(true);
     }
 
     // ---- helpers ---------------------------------------------------------------------------
@@ -292,6 +328,7 @@ class MainWindow : Window {
         settings.Clicks = On("ChkClicks");
         settings.Countdown = On("ChkCountdown");
         settings.KeepLossless = On("ChkKeep");
+        settings.AutoUpdate = On("ChkUpdates");
         settings.Save();
     }
 
@@ -383,6 +420,53 @@ class MainWindow : Window {
         var match = items.FirstOrDefault(i => i.Label == prev);
         cb.SelectedItem = match ?? items.FirstOrDefault();
         UpdateUi();
+    }
+
+    // ---- updates ------------------------------------------------------------------------------
+
+    async void CheckForUpdates(bool quiet) {
+        try {
+            update = await Task.Run(() => Updater.Check());
+        } catch (Exception e) {
+            if (!quiet) Error("Couldn't check for updates:\n" + e.Message);
+            return;
+        }
+        if (update == null) {
+            F<Border>("UpdateBanner").Visibility = Visibility.Collapsed;
+            if (!quiet) MessageBox.Show(this, "You're up to date (version " + Updater.Pretty(Updater.Current) + ").", Program.AppName, MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        F<TextBlock>("UpdateTitle").Text = "Version " + Updater.Pretty(update.Version) + " is available";
+        F<TextBlock>("UpdateSub").Text = "You have " + Updater.Pretty(Updater.Current) + ". The update takes a few seconds.";
+        F<Border>("UpdateBanner").Visibility = Visibility.Visible;
+    }
+
+    async void InstallUpdate() {
+        if (update == null || updating) return;
+        if (session != null || starting || job != null) {
+            Error("Please wait until the current recording" + (job != null ? " has finished " + job.Verb.ToLowerInvariant() : " is finished") + ", then update.");
+            return;
+        }
+        updating = true;
+        var btn = F<Button>("BtnUpdate");
+        var bar = F<ProgressBar>("UpdateBar");
+        btn.IsEnabled = false;
+        bar.Visibility = Visibility.Visible;
+        F<TextBlock>("UpdateSub").Text = "Downloading...";
+        try {
+            string installer = await Updater.Download(update, p => Dispatcher.BeginInvoke(new Action(() => bar.Value = p)));
+            F<TextBlock>("UpdateSub").Text = "Installing... the app will restart.";
+            SaveSettings();
+            Updater.Install(installer);
+            await Task.Delay(500);
+            Application.Current.Shutdown();
+        } catch (Exception e) {
+            updating = false;
+            btn.IsEnabled = true;
+            bar.Visibility = Visibility.Collapsed;
+            F<TextBlock>("UpdateSub").Text = "You have " + Updater.Pretty(Updater.Current) + ".";
+            Error("The update couldn't be installed:\n" + e.Message);
+        }
     }
 
     SrcItem SavedArea() {

@@ -8,6 +8,7 @@ A simple, modern screen recorder for Windows 10/11.
 - Red **frame** around the recorded area, optional **3-2-1 countdown**, optional **click highlights**
 - Saves small, **visually lossless MP4** files that play everywhere (captured losslessly, then compressed with H.264 CRF 18)
 - Optional: keep the truly lossless original; export to high-quality MP4, extra-small MP4 or lossless MKV
+- **Automatic updates** from GitHub Releases (verified with the SHA-256 checksum GitHub publishes)
 
 ## Install
 
@@ -29,6 +30,14 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -NoInstaller  # app only -> b
 
 The build copies `ffmpeg.exe` and `ffplay.exe` next to the app, so the installer works on PCs without FFmpeg.
 
+## Releasing an update
+
+1. Bump `AssemblyVersion` / `AssemblyFileVersion` in `src/Program.cs` (the only place the version lives) and commit.
+2. Write release notes in a Markdown file.
+3. Run `powershell -ExecutionPolicy Bypass -File release.ps1 -NotesFile notes.md` (needs the GitHub CLI, signed in).
+
+Installed copies check GitHub on startup and offer the update with one click.
+
 ## How it works
 
 | File | What it does |
@@ -40,6 +49,8 @@ The build copies `ffmpeg.exe` and `ffplay.exe` next to the app, so the installer
 | `src/Overlays.cs` | Control bar, countdown and recording frame (excluded from capture) |
 | `src/AreaPicker.cs` | Drag-to-select overlay for recording part of the screen |
 | `src/Theme.cs` | Dark theme and control styles |
+| `src/Updater.cs` | Checks GitHub Releases, downloads and verifies the installer, runs it silently |
+| `release.ps1` | Builds and publishes a GitHub release |
 | `installer.iss` | Inno Setup installer script |
 
 Settings are stored in `%APPDATA%\MakeMyWebScreenRecorder\settings.ini`; crashes are logged to `error.log` in the same folder.

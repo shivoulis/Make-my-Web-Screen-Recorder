@@ -3,6 +3,7 @@
 #   2. compiles src\Program.cs into build\MakeMyWebScreenRecorder.exe with the C# compiler built into Windows
 #   3. copies FFmpeg next to it (build\ffmpeg\)
 #   4. builds the installer with Inno Setup -> dist\MakeMyWebScreenRecorder-Setup-<version>.exe
+# The version number lives only in src\Program.cs (AssemblyVersion).
 # Usage:  powershell -ExecutionPolicy Bypass -File build.ps1 [-NoInstaller]
 
 param([switch]$NoInstaller)
@@ -63,7 +64,7 @@ $exe = Join-Path $build 'MakeMyWebScreenRecorder.exe'
 & $csc /nologo /target:winexe /optimize+ /platform:anycpu "/out:$exe" "/win32icon:$ico" "/lib:$fw\WPF" `
     /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Xaml.dll `
     /r:WindowsBase.dll /r:PresentationCore.dll /r:PresentationFramework.dll `
-    /r:UIAutomationClient.dll /r:UIAutomationTypes.dll /r:Microsoft.VisualBasic.dll `
+    /r:UIAutomationClient.dll /r:UIAutomationTypes.dll /r:Microsoft.VisualBasic.dll /r:System.Web.Extensions.dll `
     (Join-Path $root 'src\*.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Compile failed' }
 Write-Host "Compiled $exe"
@@ -87,6 +88,7 @@ Write-Host 'Copied FFmpeg'
 if ($NoInstaller) { return }
 $iscc = @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) { throw 'Inno Setup not found (winget install JRSoftware.InnoSetup)' }
-& $iscc /Q (Join-Path $root 'installer.iss')
+$version = [regex]::Match((Get-Content (Join-Path $root 'src\Program.cs') -Raw), 'AssemblyVersion\("(\d+\.\d+\.\d+)').Groups[1].Value
+& $iscc /Q "/DAppVersion=$version" (Join-Path $root 'installer.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
 Get-ChildItem (Join-Path $root 'dist') -Filter *.exe | ForEach-Object { Write-Host ("Installer: {0} ({1:N0} MB)" -f $_.FullName, ($_.Length / 1MB)) }

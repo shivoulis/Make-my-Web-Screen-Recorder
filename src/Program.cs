@@ -26,8 +26,8 @@ using System.Windows.Forms;
 [assembly: AssemblyProduct("Make my Web Screen Recorder")]
 [assembly: AssemblyDescription("Screen, window and browser-tab recorder")]
 [assembly: AssemblyCopyright("Copyright (C) 2026 shivoulis. Licensed under the GNU GPL v3 or later.")]
-[assembly: AssemblyVersion("2.1.0.0")]
-[assembly: AssemblyFileVersion("2.1.0.0")]
+[assembly: AssemblyVersion("2.2.0.0")]
+[assembly: AssemblyFileVersion("2.2.0.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace MakeMyWebRecorder {
@@ -182,7 +182,7 @@ class Settings {
     public string Fps = "30";
     public string Mic = "";
     public string Area = "";        // last selected area: x,y,w,h in physical pixels
-    public bool MicOn = true, SystemAudio = true, Cursor = true, Clicks = true, Countdown = true, KeepLossless = false;
+    public bool MicOn = true, SystemAudio = true, Cursor = true, Clicks = true, Countdown = true, KeepLossless = false, AutoUpdate = true;
 
     static string FilePath {
         get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MakeMyWebScreenRecorder", "settings.ini"); }
@@ -209,6 +209,7 @@ class Settings {
                     case "Clicks": s.Clicks = b; break;
                     case "Countdown": s.Countdown = b; break;
                     case "KeepLossless": s.KeepLossless = b; break;
+                    case "AutoUpdate": s.AutoUpdate = b; break;
                 }
             }
         } catch { }
@@ -221,7 +222,7 @@ class Settings {
             File.WriteAllLines(FilePath, new[] {
                 "Folder=" + Folder, "Mode=" + Mode, "Fps=" + Fps, "Mic=" + Mic, "Area=" + Area,
                 "MicOn=" + B(MicOn), "SystemAudio=" + B(SystemAudio), "Cursor=" + B(Cursor),
-                "Clicks=" + B(Clicks), "Countdown=" + B(Countdown), "KeepLossless=" + B(KeepLossless)
+                "Clicks=" + B(Clicks), "Countdown=" + B(Countdown), "KeepLossless=" + B(KeepLossless), "AutoUpdate=" + B(AutoUpdate)
             }, Encoding.UTF8);
         } catch { }
     }
