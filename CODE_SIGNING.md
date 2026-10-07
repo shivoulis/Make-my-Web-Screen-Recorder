@@ -18,8 +18,7 @@ This program will not transfer any information to other networked systems unless
 The only network connections it makes are:
 
 - **Update check** — only if you allow it (the app asks on first start; you can change it any time in Settings). It reads the latest release information from the GitHub API. No personal data, recordings or usage information are sent.
-- **Speech model download** — only when you turn on subtitles and confirm the download. Models are downloaded from Hugging Face.
 - **Background effect model download** — only when you choose a camera background effect. The model (under 1 MB) is downloaded from Qualcomm AI Hub's public storage.
 - **Update download** — only when you click *Update*. The installer is downloaded from this repository's GitHub releases.
 
-Recordings, subtitles and settings stay on your computer. Speech recognition and camera effects run locally.
+Recordings and settings stay on your computer. Camera effects run locally.

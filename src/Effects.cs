@@ -31,13 +31,25 @@ static class SegmentationModel {
     // Apache-2.0 model published by Qualcomm AI Hub (ONNX export of Google's MediaPipe selfie segmentation).
     const string Url = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/mediapipe_selfie/releases/v0.63.0/mediapipe_selfie-onnx-float.zip";
 
-    public static string FilePath { get { return Path.Combine(Subtitles.ModelsDir, "selfie-segmentation.onnx"); } }
+    public static string ModelsDir {
+        get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MakeMyWebScreenRecorder", "models"); }
+    }
+    public static string FilePath { get { return Path.Combine(ModelsDir, "selfie-segmentation.onnx"); } }
+
+    // Deletes speech-recognition models left by version 2.3 (subtitles were taken out in 2.4).
+    public static void RemoveOldSpeechModels() {
+        try {
+            if (!Directory.Exists(ModelsDir)) return;
+            foreach (var pattern in new[] { "ggml-*.bin", "ggml-*.part" })
+                foreach (var f in Directory.GetFiles(ModelsDir, pattern)) try { File.Delete(f); } catch { }
+        } catch { }
+    }
     public static bool Available { get { return File.Exists(FilePath); } }
 
     public static async Task Download() {
         if (Available) return;
         ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-        Directory.CreateDirectory(Subtitles.ModelsDir);
+        Directory.CreateDirectory(ModelsDir);
         byte[] zip;
         using (var wc = new WebClient()) {
             wc.Headers[HttpRequestHeader.UserAgent] = "MakeMyWebScreenRecorder";
