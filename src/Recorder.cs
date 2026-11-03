@@ -3,6 +3,8 @@
 // Pause and microphone mute never touch the running capture: the session just remembers when they
 // happened, and the compression step cuts the paused parts out and silences the muted parts. Mic and
 // system audio are therefore captured on separate tracks and only mixed when compressing.
+// A "hold" (the recorded browser tab is out of sight) works the same way: sound keeps recording and
+// the compression step shows the last frame of the tab for that stretch.
 
 using System;
 using System.Collections.Generic;
@@ -25,15 +27,16 @@ class Session {
     public string RawFile;
     public bool HasMic, HasSys;
     public int Fps;
-    public bool Paused, MicMuted;
+    public bool Paused, MicMuted, Held;
     public readonly List<double[]> Pauses = new List<double[]>();
     public readonly List<double[]> Mutes = new List<double[]>();
+    public readonly List<double[]> Holds = new List<double[]>();
 
     Job job;
     LoopbackCapture loop;
     readonly Stopwatch active = new Stopwatch();   // recorded time, excluding pauses
     readonly Stopwatch wall = new Stopwatch();
-    double pauseAt, muteAt;
+    double pauseAt, muteAt, holdAt;
 
     public TimeSpan Elapsed { get { return active.Elapsed; } }
     public bool Exited { get { return job.Proc.HasExited; } }
@@ -123,11 +126,20 @@ class Session {
         MicMuted = muted;
     }
 
+    // Picture on hold while the tab is out of sight. Starts a little early and ends a little late, because
+    // the tab switch is only noticed a moment after it happens and the page needs a moment to redraw.
+    public void SetHeld(bool held) {
+        if (held == Held) return;
+        if (held) holdAt = Math.Max(0, Position() - 0.5); else Holds.Add(new[] { holdAt, Position() + 0.3 });
+        Held = held;
+    }
+
     // Stops the capture. Returns true if a usable file was written.
     public bool Stop() {
         double end = Position() + 60;
         if (Paused) { Pauses.Add(new[] { pauseAt, end }); Paused = false; }
         if (MicMuted) { Mutes.Add(new[] { muteAt, end }); MicMuted = false; }
+        if (Held) { Holds.Add(new[] { holdAt, end }); Held = false; }
         var p = job.Proc;
         if (!p.HasExited) {
             try { p.StandardInput.Write("q"); p.StandardInput.Flush(); } catch { }
@@ -160,11 +172,11 @@ static class Encode {
     public static string Args(string src, string dst, string quality, int audioTracks, bool micFirst,
                               List<double[]> pauses, List<double[]> mutes, int fps, double srcDuration,
                               string progressFile, out double outDuration) {
-        return Args(src, dst, quality, audioTracks, micFirst, pauses, mutes, fps, srcDuration, 0, progressFile, out outDuration);
+        return Args(src, dst, quality, audioTracks, micFirst, pauses, mutes, null, fps, srcDuration, 0, progressFile, out outDuration);
     }
 
     public static string Args(string src, string dst, string quality, int audioTracks, bool micFirst,
-                              List<double[]> pauses, List<double[]> mutes, int fps, double srcDuration, double startAt,
+                              List<double[]> pauses, List<double[]> mutes, List<double[]> holds, int fps, double srcDuration, double startAt,
                               string progressFile, out double outDuration) {
         // Shift pause/mute times so they are relative to the trimmed start.
         pauses = Shift(pauses, startAt);
@@ -182,10 +194,21 @@ static class Encode {
         string keep = pauses.Count == 0 ? null : "not(" + string.Join("+", pauses.Select(p => Between(p)).ToArray()) + ")";
         var graph = new List<string>();
 
-        // Video: even size, cut pauses, 4:2:0 for universal playback.
+        // Video: freeze holds, even size, cut pauses, 4:2:0 for universal playback.
+        // Holds: drop the frames while the tab was out of sight, then fps repeats the last frame before the
+        // gap; tpad does the same when the recording ended during a hold. Uses raw capture times, so it
+        // runs before the trim.
+        string vin = "[0:v]";
+        var held = Merge(holds);
+        if (held.Count > 0) {
+            double rawEnd = srcDuration + startAt, lastStart = held[held.Count - 1][0];
+            vin += "select='eq(n,0)+not(" + string.Join("+", held.Select(h => Between(h)).ToArray()) + ")',fps=" + fps + ",";
+            if (held[held.Count - 1][1] >= rawEnd)
+                vin += "tpad=stop_mode=clone:stop_duration=" + FF.Num(rawEnd - lastStart + 1) + ",trim=end=" + FF.Num(rawEnd) + ",";
+        }
         string trimV = startAt > 0 ? "trim=start=" + FF.Num(startAt) + ",setpts=PTS-STARTPTS," : "";
         string trimA = startAt > 0 ? "atrim=start=" + FF.Num(startAt) + ",asetpts=PTS-STARTPTS," : "";
-        string v = "[0:v]" + trimV + "crop=trunc(iw/2)*2:trunc(ih/2)*2";
+        string v = vin + trimV + "crop=trunc(iw/2)*2:trunc(ih/2)*2";
         if (keep != null) v += ",select='" + keep + "',setpts=N/(" + fps + "*TB)";
         graph.Add(v + ",format=yuv420p[v]");
 
@@ -213,6 +236,17 @@ static class Encode {
             : "-c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k";
         return head + "-filter_complex " + FF.Q(string.Join(";", graph.ToArray())) + " -map \"[v]\"" +
                (audioTracks > 0 ? " -map \"[a]\"" : "") + " " + opts + " -movflags +faststart" + tail;
+    }
+
+    // Sorts time ranges and joins the ones that overlap.
+    static List<double[]> Merge(List<double[]> ranges) {
+        var list = new List<double[]>();
+        if (ranges == null) return list;
+        foreach (var x in ranges.OrderBy(r => r[0])) {
+            if (list.Count > 0 && x[0] <= list[list.Count - 1][1]) list[list.Count - 1][1] = Math.Max(list[list.Count - 1][1], x[1]);
+            else list.Add(new[] { x[0], x[1] });
+        }
+        return list;
     }
 
     static List<double[]> Shift(List<double[]> ranges, double by) {

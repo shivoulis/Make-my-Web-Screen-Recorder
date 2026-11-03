@@ -25,7 +25,7 @@ class ControlBar : Window {
     readonly Ellipse dot;
     readonly Button pause, mic;
     readonly Line slash;
-    bool lastPaused;
+    bool lastPaused, lastHeld;
     DateTime discardArmedAt = DateTime.MinValue;
 
     const string Xaml = @"
@@ -133,16 +133,25 @@ class ControlBar : Window {
             Native.MoveTo(h, monitor.X + (monitor.W - r[2]) / 2, monitor.Y + (int)(8 * Overlay.Scale));
     }
 
-    public void Update(TimeSpan t, bool paused, bool muted) {
+    // held: the recorded tab is out of sight, so the picture waits on its last frame while sound records.
+    public void Update(TimeSpan t, bool paused, bool muted, bool held) {
         time.Text = t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"mm\:ss");
         if (paused != lastPaused) {
             lastPaused = paused;
+            lastHeld = false;
             state.Text = paused ? "Paused" : "Recording";
+            state.ToolTip = null;
             dot.Fill = (Brush)Application.Current.Resources[paused ? "Amber" : "Accent"];
             Pulse(!paused);
             pause.Content = paused ? "" : "";
             pause.ToolTip = paused ? "Resume" : "Pause";
             System.Windows.Automation.AutomationProperties.SetName(pause, paused ? "Resume" : "Pause");
+        }
+        if (held != lastHeld && !paused) {
+            lastHeld = held;
+            state.Text = held ? "Tab hidden" : "Recording";
+            state.ToolTip = held ? "Sound is still recording. The picture continues when you go back to the tab." : null;
+            dot.Fill = (Brush)Application.Current.Resources[held ? "Amber" : "Accent"];
         }
         slash.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
         mic.ToolTip = muted ? "Unmute microphone" : "Mute microphone";

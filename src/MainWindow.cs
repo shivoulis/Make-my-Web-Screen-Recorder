@@ -250,6 +250,7 @@ class MainWindow : Window {
     Session session;
     ControlBar bar;
     RegionFrame frame;
+    TabWatch tabWatch;
     Job job;
     UpdateInfo update;
     CameraBubble camera;
@@ -490,7 +491,7 @@ class MainWindow : Window {
             cb.IsEnabled = true;
             hint.Text = items.Count == 0
                 ? "No Chrome, Edge or Brave windows are open. Open one, then press refresh."
-                : "Switches to the tab and records only the web page, without the browser's toolbars.";
+                : "Records only the web page. If you switch to another tab, the picture waits on this one while sound keeps recording.";
         } else if (mode == "window") {
             items = Native.Windows();
             hint.Text = items.Count == 0 ? "No windows found." : "Records the window's area. Keep it in place while recording.";
@@ -691,6 +692,7 @@ class MainWindow : Window {
             if (session == null) { CloseOverlays(); Show(); Error(err); return; }
 
             frame = new RegionFrame(abs, src.Kind == "screen" || src.Kind == "desktop");
+            if (src.Kind == "tab") tabWatch = new TabWatch(src, abs);
             bar = new ControlBar(session.HasMic);
             bar.PauseClicked += TogglePause;
             bar.MicClicked += delegate { if (session != null) { session.SetMicMuted(!session.MicMuted); Tick(); } };
@@ -712,12 +714,12 @@ class MainWindow : Window {
     void TogglePause() {
         if (session == null) return;
         if (session.Paused) session.Resume(); else session.Pause();
-        if (frame != null) frame.SetPaused(session.Paused);
         Tick();
     }
 
     void CloseOverlays() {
         ClickEffects.Stop();
+        if (tabWatch != null) { tabWatch.Stop(); tabWatch = null; }
         tray.Visible = false;
         if (bar != null) { bar.Close(); bar = null; }
         if (frame != null) { frame.Close(); frame = null; }
@@ -742,7 +744,7 @@ class MainWindow : Window {
         if (!ok) { Error("The recording stopped unexpectedly.\n\n" + s.ErrorTail()); return; }
         int tracks = (s.HasMic ? 1 : 0) + (s.HasSys ? 1 : 0);
         string dst = s.RawFile.Replace(" (uncompressed).mkv", ".mp4");
-        StartEncode(s.RawFile, dst, Encode.Best, tracks, s.HasMic, s.Pauses, s.Mutes, s.Fps,
+        StartEncode(s.RawFile, dst, Encode.Best, tracks, s.HasMic, s.Pauses, s.Mutes, s.Holds, s.Fps,
                     "Compressing recording", On("ChkKeep") ? null : s.RawFile, true);
     }
 
@@ -758,14 +760,14 @@ class MainWindow : Window {
     // ---- compression / export ------------------------------------------------------------------
 
     void StartEncode(string src, string dst, string quality, int tracks, bool micFirst,
-                     List<double[]> pauses, List<double[]> mutes, int fps, string verb, string deleteWhenDone, bool freshCapture = false) {
+                     List<double[]> pauses, List<double[]> mutes, List<double[]> holds, int fps, string verb, string deleteWhenDone, bool freshCapture = false) {
         string progress = Path.Combine(Path.GetTempPath(), "mmwsr-enc-" + Guid.NewGuid() + ".txt");
         int found;
         double srcDur = FF.Probe(src, out found);
         if (tracks < 0) tracks = Math.Min(found, 2);
         double startAt = freshCapture ? FF.LeadIn(src) : 0;
         double outDur;
-        string args = Encode.Args(src, dst, quality, tracks, micFirst, pauses, mutes, fps, srcDur, startAt, progress, out outDur);
+        string args = Encode.Args(src, dst, quality, tracks, micFirst, pauses, mutes, holds, fps, srcDur, startAt, progress, out outDur);
         RunJob(args, null, dst, outDur, progress, verb, deleteWhenDone);
     }
 
@@ -821,9 +823,11 @@ class MainWindow : Window {
                 Error("The recording stopped unexpectedly.\n\n" + s.ErrorTail());
                 return;
             }
-            if (bar != null) bar.Update(session.Elapsed, session.Paused, session.MicMuted);
+            if (tabWatch != null) session.SetHeld(!tabWatch.Visible);
+            if (bar != null) bar.Update(session.Elapsed, session.Paused, session.MicMuted, session.Held);
+            if (frame != null) frame.SetPaused(session.Paused || session.Held);
             var t = session.Elapsed;
-            tray.Text = (session.Paused ? "Paused " : "Recording ") + t.ToString(@"mm\:ss") + " - click to stop";
+            tray.Text = (session.Paused ? "Paused " : session.Held ? "Tab hidden, sound recording " : "Recording ") + t.ToString(@"mm\:ss") + " - click to stop";
         }
         if (job != null) UpdateJob();
     }
@@ -950,7 +954,7 @@ class MainWindow : Window {
             Error("Pick a different file name than the original.");
             return;
         }
-        StartEncode(src, dlg.FileName, quality, -1, false, null, null, 30, "Exporting", null);
+        StartEncode(src, dlg.FileName, quality, -1, false, null, null, null, 30, "Exporting", null);
     }
 
     void Recycle(string file) {
