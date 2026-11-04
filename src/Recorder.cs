@@ -33,7 +33,7 @@ class Session {
     public readonly List<double[]> Holds = new List<double[]>();
 
     Job job;
-    LoopbackCapture loop;
+    LoopbackCapture loop, mic;
     readonly Stopwatch active = new Stopwatch();   // recorded time, excluding pauses
     readonly Stopwatch wall = new Stopwatch();
     double pauseAt, muteAt, holdAt;
@@ -67,7 +67,16 @@ class Session {
         string audio = "", maps = "-map 0:v";
         int input = 1;
         if (o.Mic != null) {
-            audio += " -f dshow -thread_queue_size 1024 -rtbufsize 256M -audio_buffer_size 50 -i " + FF.Q("audio=" + o.Mic);
+            // The mic goes through WASAPI like system audio, which records cleanly. DirectShow, the
+            // fallback, crackles and skips on many PCs.
+            s.mic = new LoopbackCapture();
+            if (s.mic.Prepare("mmwsr-mic-" + Guid.NewGuid(), o.Mic)) {
+                audio += " -f " + s.mic.Format + " -ar " + s.mic.Rate + " -ac " + s.mic.Channels + " -thread_queue_size 1024 -i " + FF.Q(s.mic.PipePath);
+            } else {
+                s.mic.Stop();
+                s.mic = null;
+                audio += " -f dshow -thread_queue_size 1024 -rtbufsize 256M -i " + FF.Q("audio=" + o.Mic);
+            }
             maps += " -map " + input++ + ":a";
             s.HasMic = true;
         }
@@ -75,6 +84,7 @@ class Session {
             s.loop = new LoopbackCapture();
             if (!s.loop.Prepare("mmwsr-" + Guid.NewGuid())) {
                 s.loop.Stop();
+                if (s.mic != null) s.mic.Stop();
                 error = "Could not capture system audio:\n" + s.loop.Error;
                 return null;
             }
@@ -91,6 +101,7 @@ class Session {
             s.job = FF.Start(args);
         } catch (Exception e) {
             if (s.loop != null) s.loop.Stop();
+            if (s.mic != null) s.mic.Stop();
             error = "Could not start FFmpeg:\n" + e.Message;
             return null;
         }
@@ -158,6 +169,7 @@ class Session {
     void Cleanup() {
         active.Stop();
         if (loop != null) loop.Stop();
+        if (mic != null) mic.Stop();
         try { File.Delete(job.ProgressFile); } catch { }
     }
 }

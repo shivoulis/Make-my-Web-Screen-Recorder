@@ -26,8 +26,8 @@ using System.Windows.Forms;
 [assembly: AssemblyProduct("Make my Web Screen Recorder")]
 [assembly: AssemblyDescription("Screen, window and browser-tab recorder")]
 [assembly: AssemblyCopyright("Copyright (C) 2026 shivoulis. Licensed under the GNU GPL v3 or later.")]
-[assembly: AssemblyVersion("2.4.1.0")]
-[assembly: AssemblyFileVersion("2.4.1.0")]
+[assembly: AssemblyVersion("2.4.2.0")]
+[assembly: AssemblyFileVersion("2.4.2.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace MakeMyWebRecorder {
@@ -442,15 +442,28 @@ static class Native {
 }
 
 // ---------------------------------------------------------------------------
-// Captures "what you hear" from the default speakers (WASAPI loopback) and streams the raw
-// samples into a named pipe that FFmpeg reads as an audio input.
+// Captures "what you hear" from the default speakers (WASAPI loopback), or a microphone, and streams
+// the raw samples into a named pipe that FFmpeg reads as an audio input.
 
 class LoopbackCapture {
     [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorCo { }
     [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IMMDeviceEnumerator { void P0(); [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice d); }
+    interface IMMDeviceEnumerator {
+        [PreserveSig] int EnumAudioEndpoints(int flow, int stateMask, out IMMDeviceCollection c);
+        [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice d);
+    }
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceCollection { [PreserveSig] int GetCount(out int n); [PreserveSig] int Item(int i, out IMMDevice d); }
     [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IMMDevice { [PreserveSig] int Activate(ref Guid iid, int ctx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o); }
+    interface IMMDevice {
+        [PreserveSig] int Activate(ref Guid iid, int ctx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o);
+        [PreserveSig] int OpenPropertyStore(int access, out IPropertyStore store);
+    }
+    [ComImport, Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IPropertyStore { void P0(); void P1(); [PreserveSig] int GetValue(ref PropKey key, out PropVariant v); }
+    [StructLayout(LayoutKind.Sequential)] struct PropKey { public Guid Fmt; public int Pid; }
+    [StructLayout(LayoutKind.Sequential)] struct PropVariant { public ushort Vt; ushort r1, r2, r3; public IntPtr P; IntPtr p2; }
+    [DllImport("ole32.dll")] static extern int PropVariantClear(ref PropVariant v);
     [ComImport, Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IAudioClient {
         [PreserveSig] int Initialize(int share, int flags, long duration, long period, IntPtr format, IntPtr session);
@@ -474,13 +487,15 @@ class LoopbackCapture {
     public string Error;
     public string PipePath { get { return @"\\.\pipe\" + pipeName; } }
 
-    string pipeName;
+    string pipeName, micName;
     volatile bool stop;
     Thread thread;
     ManualResetEvent ready = new ManualResetEvent(false);
 
-    public bool Prepare(string name) {
+    // mic: the microphone's name as listed in Windows, or null for "what you hear".
+    public bool Prepare(string name, string mic = null) {
         pipeName = name;
+        micName = mic;
         thread = new Thread(Run);
         thread.IsBackground = true;
         thread.SetApartmentState(ApartmentState.MTA);
@@ -504,10 +519,11 @@ class LoopbackCapture {
         try {
             var en = (IMMDeviceEnumerator)new MMDeviceEnumeratorCo();
             IMMDevice dev;
-            Check(en.GetDefaultAudioEndpoint(0, 0, out dev), "Finding the speakers");
+            if (micName == null) Check(en.GetDefaultAudioEndpoint(0, 0, out dev), "Finding the speakers");
+            else if ((dev = FindMic(en, micName)) == null) throw new Exception("Microphone not found: " + micName);
             object o;
             Guid iid = typeof(IAudioClient).GUID;
-            Check(dev.Activate(ref iid, 23, IntPtr.Zero, out o), "Opening the speakers");
+            Check(dev.Activate(ref iid, 23, IntPtr.Zero, out o), micName == null ? "Opening the speakers" : "Opening the microphone");
             client = (IAudioClient)o;
             IntPtr fmt;
             Check(client.GetMixFormat(out fmt), "Reading the audio format");
@@ -523,7 +539,8 @@ class LoopbackCapture {
                 isFloat = new Guid(g) == new Guid("00000003-0000-0010-8000-00aa00389b71");
             }
             Format = isFloat ? (bits == 64 ? "f64le" : "f32le") : (bits == 16 ? "s16le" : bits == 24 ? "s24le" : "s32le");
-            Check(client.Initialize(0, 0x20000, 10000000, 0, fmt, IntPtr.Zero), "Starting loopback capture");
+            Check(client.Initialize(0, micName == null ? 0x20000 : 0, 10000000, 0, fmt, IntPtr.Zero),
+                  micName == null ? "Starting loopback capture" : "Starting the microphone");
             Marshal.FreeCoTaskMem(fmt);
             Guid ciid = typeof(IAudioCaptureClient).GUID;
             Check(client.GetService(ref ciid, out o), "Opening the capture stream");
@@ -555,9 +572,10 @@ class LoopbackCapture {
                     got = true;
                 }
                 // Loopback delivers nothing while nothing is playing, so fill those gaps with silence
-                // to keep the audio in step with the video.
+                // to keep the audio in step with the video. A microphone delivers all the time, and
+                // filling in there would only add stray gaps when a packet is a little late.
                 long behind = (long)(clock.Elapsed.TotalSeconds * Rate) - written;
-                if (!got && behind > Rate / 20) {
+                if (!got && micName == null && behind > Rate / 20) {
                     int n = (int)Math.Min(behind, zeros.Length / block);
                     pipe.Write(zeros, 0, n * block);
                     written += n;
@@ -571,6 +589,26 @@ class LoopbackCapture {
             try { if (client != null) client.Stop(); } catch { }
             try { if (pipe != null) pipe.Dispose(); } catch { }
         }
+    }
+
+    // Finds an active microphone by the name Windows shows for it. FFmpeg lists the same name, but cut
+    // to 31 characters for long names, so a longer name that starts with it also counts.
+    static IMMDevice FindMic(IMMDeviceEnumerator en, string name) {
+        IMMDevice prefix = null;
+        IMMDeviceCollection all;
+        if (en.EnumAudioEndpoints(1, 1, out all) != 0) return null;
+        int count;
+        all.GetCount(out count);
+        var key = new PropKey { Fmt = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), Pid = 14 };   // friendly name
+        for (int i = 0; i < count; i++) {
+            IMMDevice d; IPropertyStore ps; PropVariant v;
+            if (all.Item(i, out d) != 0 || d.OpenPropertyStore(0, out ps) != 0 || ps.GetValue(ref key, out v) != 0) continue;
+            string n = v.Vt == 31 ? Marshal.PtrToStringUni(v.P) : null;
+            PropVariantClear(ref v);
+            if (n == name) return d;
+            if (n != null && name.Length >= 31 && prefix == null && n.StartsWith(name)) prefix = d;
+        }
+        return prefix;
     }
 }
 
