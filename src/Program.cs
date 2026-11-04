@@ -26,8 +26,8 @@ using System.Windows.Forms;
 [assembly: AssemblyProduct("Make my Web Screen Recorder")]
 [assembly: AssemblyDescription("Screen, window and browser-tab recorder")]
 [assembly: AssemblyCopyright("Copyright (C) 2026 shivoulis. Licensed under the GNU GPL v3 or later.")]
-[assembly: AssemblyVersion("2.4.0.0")]
-[assembly: AssemblyFileVersion("2.4.0.0")]
+[assembly: AssemblyVersion("2.4.1.0")]
+[assembly: AssemblyFileVersion("2.4.1.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace MakeMyWebRecorder {
@@ -296,6 +296,8 @@ static class Native {
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int c);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v);
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr h, uint affinity);
@@ -355,6 +357,19 @@ static class Native {
         }, IntPtr.Zero);
         return list;
     }
+
+    public static bool IsMinimized(IntPtr h) { return IsIconic(h); }
+
+    public static string Title(IntPtr h) {
+        var sb = new StringBuilder(GetWindowTextLength(h) + 1);
+        GetWindowText(h, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
+    public static uint ProcessId(IntPtr h) { uint pid; GetWindowThreadProcessId(h, out pid); return pid; }
+
+    // The top window that owns h (for menus and popups), or h itself.
+    public static IntPtr RootOwner(IntPtr h) { var r = GetAncestor(h, 3); return r == IntPtr.Zero ? h : r; }
 
     public static string ClassName(IntPtr h) {
         var sb = new StringBuilder(128);
